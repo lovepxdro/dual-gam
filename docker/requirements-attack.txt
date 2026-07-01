@@ -1,0 +1,13 @@
+# Dual-GAM h-attack dependencies
+
+# ML / GAN
+numpy==1.26.4
+scikit-learn==1.5.0
+pandas==2.2.2
+pyarrow==16.1.0
+
+# Geração de tráfego
+scapy==2.5.0
+
+# Utilitários
+tqdm==4.66.4

@@ -1,0 +1,25 @@
+# Dataset (grande demais para o repo)
+data/
+
+# PyTorch wheel local
+docker/*.whl
+
+# Modelos treinados (volume Docker)
+models/
+
+# Logs
+logs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db

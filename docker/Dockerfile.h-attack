@@ -1,0 +1,36 @@
+# Dual-GAM — Container h-attack (fonte do ataque)
+# Contém: PyTorch (GAN), Scapy (geração de pacotes), Python 3.11
+
+FROM python:3.11-slim
+
+# Dependências de sistema necessárias para o Scapy
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpcap-dev \
+    tcpdump \
+    iputils-ping \
+    net-tools \
+    iproute2 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Instalar PyTorch a partir do wheel local (evita timeout de download)
+COPY docker/torch-2.3.1+cpu-cp311-cp311-linux_x86_64.whl /tmp/
+RUN pip install --no-cache-dir /tmp/torch-2.3.1+cpu-cp311-cp311-linux_x86_64.whl && rm /tmp/*.whl
+
+# Instalar demais dependências Python
+COPY docker/requirements-attack.txt .
+RUN pip install --no-cache-dir -r requirements-attack.txt
+
+# Copiar código do h-attack
+COPY h-attack/ .
+
+# Criar diretórios necessários
+RUN mkdir -p /models /data /logs
+
+# Scapy requer root para raw sockets
+# (NET_RAW capability é concedida no docker-compose)
+USER root
+
+ENTRYPOINT ["python", "main.py"]
+CMD ["dry-run", "--target", "172.20.0.10"]

@@ -1,0 +1,134 @@
+# Dual-GAM — Topologia de rede Docker
+#
+# Mapeia o diagrama da IC:
+#   h1-h4  (hosts legítimos)  →  bridge ddos-net
+#   h-attack (fonte do ataque) →  bridge ddos-net
+#   s1 (switch)               →  bridge ddos-net  (simulado pela bridge Docker)
+#   h-target (servidor alvo)  →  bridge ddos-net
+#
+# O "switch s1" é a bridge Docker ddos-net (172.20.0.0/24).
+# Em iterações futuras, será substituído por Open vSwitch + Ryu SDN.
+
+networks:
+  ddos-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+
+volumes:
+  models:        # modelos GAN compartilhados entre treino e ataque
+  data:          # dataset CIC-IDS2017
+  logs:
+
+services:
+
+  # ── Servidor alvo ──────────────────────────────────────────────────────
+  h-target:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.h-target
+    container_name: h-target
+    networks:
+      ddos-net:
+        ipv4_address: 172.20.0.10
+    ports:
+      - "8080:80"        # acesso externo para debug
+    restart: unless-stopped
+
+  # ── Hosts legítimos (tráfego benigno) ─────────────────────────────────
+  # Simulam os h1-h4 do diagrama com curl em loop
+  h1:
+    image: curlimages/curl:latest
+    container_name: h1
+    networks:
+      ddos-net:
+        ipv4_address: 172.20.0.21
+    command: >
+      sh -c "while true; do curl -s http://172.20.0.10/ > /dev/null; sleep 1; done"
+    restart: unless-stopped
+    depends_on: [h-target]
+
+  h2:
+    image: curlimages/curl:latest
+    container_name: h2
+    networks:
+      ddos-net:
+        ipv4_address: 172.20.0.22
+    command: >
+      sh -c "while true; do curl -s http://172.20.0.10/ > /dev/null; sleep 2; done"
+    restart: unless-stopped
+    depends_on: [h-target]
+
+  h3:
+    image: curlimages/curl:latest
+    container_name: h3
+    networks:
+      ddos-net:
+        ipv4_address: 172.20.0.23
+    command: >
+      sh -c "while true; do curl -s http://172.20.0.10/ > /dev/null; sleep 3; done"
+    restart: unless-stopped
+    depends_on: [h-target]
+
+  h4:
+    image: curlimages/curl:latest
+    container_name: h4
+    networks:
+      ddos-net:
+        ipv4_address: 172.20.0.24
+    command: >
+      sh -c "while true; do curl -s http://172.20.0.10/ > /dev/null; sleep 1; done"
+    restart: unless-stopped
+    depends_on: [h-target]
+
+  # ── Treino (roda uma vez, depois pode ser removido) ────────────────────
+  h-attack-train:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.h-attack
+    container_name: h-attack-train
+    networks:
+      ddos-net:
+        ipv4_address: 172.20.0.30
+    volumes:
+      - models:/models
+      - data:/data
+      - logs:/logs
+    command: ["train", "--data", "/data/DDoS-Friday-no-metadata.parquet", "--rodadas", "20"]
+    profiles: ["train"]    # só roda com: docker compose --profile train up
+
+  # ── Atacante (roda após o treino) ──────────────────────────────────────
+  h-attack:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.h-attack
+    container_name: h-attack
+    networks:
+      ddos-net:
+        ipv4_address: 172.20.0.31
+    volumes:
+      - models:/models
+      - logs:/logs
+    cap_add:
+      - NET_RAW          # necessário para raw sockets do Scapy
+      - NET_ADMIN
+    command: ["attack", "--target", "172.20.0.10", "--port", "80", "--ciclos", "10"]
+    depends_on: [h-target]
+    profiles: ["attack"]  # só roda com: docker compose --profile attack up
+
+  # ── Dry-run (para testes sem enviar pacotes reais) ────────────────────
+  h-attack-dry:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.h-attack
+    container_name: h-attack-dry
+    networks:
+      ddos-net:
+        ipv4_address: 172.20.0.32
+    volumes:
+      - models:/models
+      - logs:/logs
+    command: ["dry-run", "--target", "172.20.0.10", "--ciclos", "3"]
+    depends_on: [h-target]
+    profiles: ["dry-run"]
