@@ -1,7 +1,9 @@
 """
 Dual-GAM — Pré-processamento de dados
 
-Carrega o CIC-IDS2017, realiza o split treino/teste e normaliza os dados.
+Carrega o CIC-IDS2017, realiza auditoria do dataset, divide treino/teste
+e normaliza os dados.
+
 O StandardScaler é ajustado exclusivamente sobre o conjunto de treino.
 """
 
@@ -22,8 +24,6 @@ logger = logging.getLogger(__name__)
 # Features do CIC-IDS2017 que mapeiam para parâmetros de rede reais.
 # Usado pelo Translator para saber quais colunas correspondem ao quê.
 FEATURE_MAP = {
-    # índice: (nome_feature, tipo)
-    # Baseado no CIC-IDS2017 — 77 features no total
     "flow_duration": 0,
     "fwd_packet_length_max": 4,
     "fwd_packet_length_mean": 6,
@@ -53,7 +53,7 @@ FEATURE_MAP = {
 
 
 class Preprocessador:
-    """Carrega e normaliza o dataset CIC-IDS2017."""
+    """Carrega, audita e normaliza o dataset CIC-IDS2017."""
 
     def __init__(self):
         self.scaler = StandardScaler()
@@ -107,6 +107,96 @@ class Preprocessador:
             y_encoded.astype(np.float32),
         )
 
+    def auditar_duplicatas(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+    ) -> int:
+        """
+        Detecta amostras duplicadas no dataset.
+
+        A comparação considera todas as features e o label.
+        A primeira ocorrência é considerada original; ocorrências
+        posteriores idênticas são contabilizadas como duplicatas.
+        """
+        df = pd.DataFrame(
+            X,
+            columns=self.feature_names,
+        )
+
+        df["_label"] = y
+
+        duplicadas = int(df.duplicated().sum())
+
+        if duplicadas > 0:
+            logger.warning(
+                "Auditoria — amostras duplicadas no dataset: %d",
+                duplicadas,
+            )
+        else:
+            logger.info(
+                "Auditoria — amostras duplicadas no dataset: 0"
+            )
+
+        return duplicadas
+
+    def auditar_intersecao(
+        self,
+        X_train: np.ndarray,
+        y_train: np.ndarray,
+        X_test: np.ndarray,
+        y_test: np.ndarray,
+    ) -> int:
+        """
+        Verifica se existem amostras idênticas em treino e teste.
+
+        Cada amostra é representada por um hash calculado sobre
+        todas as features e o respectivo label.
+        """
+        train_df = pd.DataFrame(
+            X_train,
+            columns=self.feature_names,
+        )
+        train_df["_label"] = y_train
+
+        test_df = pd.DataFrame(
+            X_test,
+            columns=self.feature_names,
+        )
+        test_df["_label"] = y_test
+
+        train_hashes = set(
+            pd.util.hash_pandas_object(
+                train_df,
+                index=False,
+            ).to_numpy()
+        )
+
+        test_hashes = set(
+            pd.util.hash_pandas_object(
+                test_df,
+                index=False,
+            ).to_numpy()
+        )
+
+        intersecao = train_hashes.intersection(test_hashes)
+        quantidade = len(intersecao)
+
+        if quantidade > 0:
+            logger.error(
+                "Auditoria — interseção treino/teste: %d amostras",
+                quantidade,
+            )
+        else:
+            logger.info(
+                "Auditoria — interseção treino/teste: 0 amostras"
+            )
+            logger.info(
+                "Auditoria — isolamento treino/teste: OK"
+            )
+
+        return quantidade
+
     def split_e_normalizar(
         self,
         X: np.ndarray,
@@ -115,11 +205,16 @@ class Preprocessador:
         random_state: int = 42,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
-        Divide os dados antes da normalização.
+        Audita o dataset, divide treino/teste e normaliza os dados.
 
         O StandardScaler é ajustado exclusivamente sobre o conjunto
         de treino e depois aplicado separadamente ao treino e ao teste.
         """
+
+        # Auditoria global antes do split.
+        self.auditar_duplicatas(X, y)
+
+        # Divisão treino/teste.
         X_train, X_test, y_train, y_test = train_test_split(
             X,
             y,
@@ -128,28 +223,50 @@ class Preprocessador:
             stratify=y,
         )
 
-        # Importante:
-        # fit somente no treino para evitar data leakage.
+        logger.info(
+            "Split concluído — treino: %d | teste: %d",
+            len(X_train),
+            len(X_test),
+        )
+
+        # Auditoria de isolamento entre treino e teste.
+        intersecao = self.auditar_intersecao(
+            X_train,
+            y_train,
+            X_test,
+            y_test,
+        )
+
+        # Não permitir treinamento com conjuntos contaminados.
+        if intersecao > 0:
+            raise RuntimeError(
+                "Data leakage detectado: "
+                f"{intersecao} amostras idênticas aparecem "
+                "simultaneamente nos conjuntos de treino e teste."
+            )
+
+        # StandardScaler ajustado SOMENTE no conjunto de treino.
         X_train_scaled = self.scaler.fit_transform(X_train)
 
-        # O teste utiliza as estatísticas aprendidas no treino.
+        # Teste utiliza apenas as estatísticas aprendidas no treino.
         X_test_scaled = self.scaler.transform(X_test)
 
         logger.info(
-            "Split concluído — treino: %d | teste: %d",
-            len(X_train_scaled),
-            len(X_test_scaled),
-        )
-
-        # Verificação simples de que o scaler foi ajustado apenas no treino.
-        logger.info(
             "Média absoluta do treino normalizado: %.6f",
-            float(np.abs(X_train_scaled.mean(axis=0)).mean()),
+            float(
+                np.abs(
+                    X_train_scaled.mean(axis=0)
+                ).mean()
+            ),
         )
 
         logger.info(
             "Média absoluta do teste normalizado: %.6f",
-            float(np.abs(X_test_scaled.mean(axis=0)).mean()),
+            float(
+                np.abs(
+                    X_test_scaled.mean(axis=0)
+                ).mean()
+            ),
         )
 
         return (
@@ -173,10 +290,16 @@ class Preprocessador:
         with open(path / "feature_names.pkl", "wb") as f:
             pickle.dump(self.feature_names, f)
 
-        logger.info("Preprocessador salvo em %s", path)
+        logger.info(
+            "Preprocessador salvo em %s",
+            path,
+        )
 
     @classmethod
-    def carregar(cls, path: str | Path) -> "Preprocessador":
+    def carregar(
+        cls,
+        path: str | Path,
+    ) -> "Preprocessador":
         """Carrega scaler, encoder e nomes das features."""
         path = Path(path)
 
@@ -193,6 +316,9 @@ class Preprocessador:
 
         return obj
 
-    def desnormalizar(self, X_scaled: np.ndarray) -> np.ndarray:
+    def desnormalizar(
+        self,
+        X_scaled: np.ndarray,
+    ) -> np.ndarray:
         """Converte os dados normalizados de volta à escala original."""
         return self.scaler.inverse_transform(X_scaled)
