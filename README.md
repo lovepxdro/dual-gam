@@ -145,6 +145,7 @@ watch -n1 'curl -s http://localhost:8080/metrics | python3 -m json.tool'
 | v1.0 | Implementação inicial |
 | v1.1 | Correção de data leakage |
 | v1.2 | Auditoria do dataset |
+| v1.3 | Reprodutibilidade: seed fixa |
 
 ---
 

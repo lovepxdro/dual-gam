@@ -13,8 +13,8 @@ Uso:
 """
 
 import argparse
+import json
 import logging
-import os
 import sys
 from pathlib import Path
 
@@ -22,49 +22,69 @@ from pathlib import Path
 # Logging configurado antes de qualquer import interno.
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+    format=(
+        "%(asctime)s [%(levelname)s] "
+        "%(name)s — %(message)s"
+    ),
     datefmt="%H:%M:%S",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler("/logs/h-attack.log"),
+        logging.FileHandler(
+            "/logs/h-attack.log"
+        ),
     ],
 )
 
 logger = logging.getLogger("main")
 
 
-def cmd_train(args: argparse.Namespace) -> None:
+def cmd_train(
+    args: argparse.Namespace,
+) -> None:
     """Treina os modelos GAN com o dataset CIC-IDS2017."""
+
     from gan.preprocessing import Preprocessador
-    from gan.trainer import AdversarialTrainer, TrainingConfig
+    from gan.trainer import (
+        AdversarialTrainer,
+        TrainingConfig,
+        definir_seed,
+    )
 
     logger.info("=== MODO TREINO ===")
-    logger.info("Dataset: %s", args.data)
+    logger.info(
+        "Dataset: %s",
+        args.data,
+    )
+
+    # A seed deve ser definida antes:
+    # - do split;
+    # - da criação dos modelos;
+    # - da criação dos DataLoaders.
+    definir_seed(args.seed)
 
     # 1. Pré-processamento.
-    #
-    # O dataset é carregado sem normalização.
-    # O split treino/teste ocorre antes do ajuste do StandardScaler,
-    # evitando vazamento de informações do conjunto de teste.
     prep = Preprocessador()
 
-    X, y = prep.carregar_parquet(args.data)
+    X, y = prep.carregar_parquet(
+        args.data
+    )
 
-    X_train, X_test, y_train, y_test = prep.split_e_normalizar(
-        X,
-        y,
+    X_train, X_test, y_train, y_test = (
+        prep.split_e_normalizar(
+            X,
+            y,
+            random_state=args.seed,
+        )
     )
 
     # Salvar preprocessador.
-    # Necessário posteriormente para o Translator desnormalizar
-    # os vetores gerados pelo atacante.
     prep.salvar(
-        Path(args.models_dir) / "preprocessador"
+        Path(args.models_dir)
+        / "preprocessador"
     )
 
-    # Salvar amostras reais de DDoS para uso do Controller.
-    #
-    # As amostras vêm exclusivamente do conjunto de treino.
+    # Salvar amostras reais de DDoS
+    # provenientes exclusivamente do treino.
     import torch as _torch
 
     mask_ddos_train = y_train == 1
@@ -75,7 +95,8 @@ def cmd_train(args: argparse.Namespace) -> None:
 
     _torch.save(
         X_ddos_export,
-        Path(args.models_dir) / "ddos_samples.pt",
+        Path(args.models_dir)
+        / "ddos_samples.pt",
     )
 
     logger.info(
@@ -83,19 +104,88 @@ def cmd_train(args: argparse.Namespace) -> None:
         len(X_ddos_export),
     )
 
-    # 2. Configuração do treino.
+    # 2. Configuração do treinamento.
     cfg = TrainingConfig(
+        seed=args.seed,
         input_dim=X_train.shape[1],
         noise_dim=args.noise_dim,
         n_rodadas=args.rodadas,
         epochs_por_rodada=args.epochs,
         device=args.device,
-        checkpoint_dir=Path(args.models_dir),
+        checkpoint_dir=Path(
+            args.models_dir
+        ),
     )
 
-    # 3. Treino adversarial.
+    # 3. Criar Trainer.
     trainer = AdversarialTrainer(cfg)
 
+    # Salvar configuração completa da execução
+    # antes de iniciar o treinamento.
+    config_execucao = {
+        "seed": cfg.seed,
+        "dataset": str(args.data),
+
+        "dados": {
+            "input_dim": cfg.input_dim,
+            "noise_dim": cfg.noise_dim,
+            "test_size": 0.2,
+        },
+
+        "treinamento": {
+            "lr_defensor": cfg.lr_defensor,
+            "lr_atacante": cfg.lr_atacante,
+            "adam_betas_atacante": list(
+                cfg.adam_betas
+            ),
+            "epsilon": cfg.epsilon,
+            "epochs_pretrain": (
+                cfg.epochs_pretrain
+            ),
+            "epochs_por_rodada": (
+                cfg.epochs_por_rodada
+            ),
+            "n_rodadas": cfg.n_rodadas,
+            "amostras_por_rodada": (
+                cfg.amostras_por_rodada
+            ),
+            "batch_size": cfg.batch_size,
+            "device": cfg.device,
+        },
+
+        "arquitetura": {
+            "defensor": str(
+                trainer.defensor
+            ),
+            "atacante": str(
+                trainer.atacante
+            ),
+        },
+    }
+
+    config_path = (
+        Path(args.models_dir)
+        / "config_execucao.json"
+    )
+
+    with open(
+        config_path,
+        "w",
+        encoding="utf-8",
+    ) as f:
+        json.dump(
+            config_execucao,
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
+
+    logger.info(
+        "Configuração da execução salva em %s",
+        config_path,
+    )
+
+    # 4. Treino adversarial.
     trainer.carregar_dados(
         X_train,
         y_train,
@@ -107,30 +197,36 @@ def cmd_train(args: argparse.Namespace) -> None:
 
     historico = trainer.rodar_ciclo()
 
-    # 4. Salvar modelos finais.
+    # 5. Salvar modelos finais.
     import torch
 
-    models_path = Path(args.models_dir)
+    models_path = Path(
+        args.models_dir
+    )
 
     torch.save(
         trainer.atacante.state_dict(),
-        models_path / "atacante_final.pth",
+        models_path
+        / "atacante_final.pth",
     )
 
     torch.save(
         trainer.defensor.state_dict(),
-        models_path / "defensor_adaptativo_final.pth",
+        models_path
+        / "defensor_adaptativo_final.pth",
     )
 
-    # 5. Salvar histórico com taxa de evasão por rodada.
-    # Utilizado posteriormente pelo Controller para escolher checkpoints.
-    import json
-
+    # 6. Salvar histórico.
     historico_path = (
-        Path(args.models_dir) / "historico_treino.json"
+        models_path
+        / "historico_treino.json"
     )
 
-    with open(historico_path, "w") as f:
+    with open(
+        historico_path,
+        "w",
+        encoding="utf-8",
+    ) as f:
         json.dump(
             historico,
             f,
@@ -142,14 +238,20 @@ def cmd_train(args: argparse.Namespace) -> None:
         historico_path,
     )
 
-    logger.info("=== TREINO CONCLUÍDO ===")
+    logger.info(
+        "=== TREINO CONCLUÍDO ==="
+    )
 
     taxa_final = (
-        historico["taxa_evasao"][-1] * 100
+        historico["taxa_evasao"][-1]
+        * 100
     )
 
     acc_final = (
-        historico["acuracia_defensor"][-1] * 100
+        historico[
+            "acuracia_defensor"
+        ][-1]
+        * 100
     )
 
     logger.info(
@@ -168,11 +270,18 @@ def cmd_attack(
     dry_run: bool = False,
 ) -> None:
     """Executa ataques usando modelos treinados."""
-    from controller.controller import AttackController
+
+    from controller.controller import (
+        AttackController,
+    )
 
     logger.info(
         "=== MODO %s ===",
-        "DRY-RUN" if dry_run else "ATAQUE",
+        (
+            "DRY-RUN"
+            if dry_run
+            else "ATAQUE"
+        ),
     )
 
     logger.info(
@@ -184,9 +293,12 @@ def cmd_attack(
     controller = AttackController(
         target_ip=args.target,
         target_port=args.port,
-        models_dir=Path(args.models_dir),
+        models_dir=Path(
+            args.models_dir
+        ),
         preprocessador_dir=(
-            Path(args.models_dir) / "preprocessador"
+            Path(args.models_dir)
+            / "preprocessador"
         ),
         dry_run=dry_run,
         device=args.device,
@@ -194,7 +306,9 @@ def cmd_attack(
 
     controller.executar_loop(
         n_ciclos=args.ciclos,
-        intervalo_entre_ciclos=args.intervalo,
+        intervalo_entre_ciclos=(
+            args.intervalo
+        ),
         n_vetores=args.n_vetores,
     )
 
@@ -213,7 +327,10 @@ def main() -> None:
     parser.add_argument(
         "--device",
         default="cpu",
-        choices=["cpu", "cuda"],
+        choices=[
+            "cpu",
+            "cuda",
+        ],
     )
 
     sub = parser.add_subparsers(
@@ -221,7 +338,8 @@ def main() -> None:
         required=True,
     )
 
-    # Subcomando: train.
+    # ── train ─────────────────────────────
+
     p_train = sub.add_parser(
         "train",
         help="Treinar modelos GAN",
@@ -230,7 +348,10 @@ def main() -> None:
     p_train.add_argument(
         "--data",
         required=True,
-        help="Path do .parquet CIC-IDS2017",
+        help=(
+            "Path do .parquet "
+            "CIC-IDS2017"
+        ),
     )
 
     p_train.add_argument(
@@ -251,7 +372,18 @@ def main() -> None:
         default=32,
     )
 
-    # Subcomando: attack.
+    p_train.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help=(
+            "Seed para "
+            "reprodutibilidade"
+        ),
+    )
+
+    # ── attack ────────────────────────────
+
     p_attack = sub.add_parser(
         "attack",
         help="Executar ataques reais",
@@ -287,10 +419,14 @@ def main() -> None:
         default=100,
     )
 
-    # Subcomando: dry-run.
+    # ── dry-run ───────────────────────────
+
     p_dry = sub.add_parser(
         "dry-run",
-        help="Simular ataques sem enviar pacotes",
+        help=(
+            "Simular ataques "
+            "sem enviar pacotes"
+        ),
     )
 
     p_dry.add_argument(
@@ -324,7 +460,6 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    # Criar diretório de logs se não existir.
     Path("/logs").mkdir(
         exist_ok=True
     )
