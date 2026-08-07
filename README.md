@@ -14,7 +14,7 @@ A questão central da pesquisa não é "detectar DDoS melhor" — isso já exist
 
 Na etapa inicial, validamos o conceito com um experimento em notebook (Colab): defensor com 99.91% de acurácia em dados estáticos, mas vulnerável a ataques perturbados na primeira rodada (75% de evasão). Após 20 rodadas de co-evolução, o defensor adaptativo convergiu para ~98.3% — pagando um trade-off honesto entre acurácia e robustez.
 
-Nesta etapa, saímos do notebook e implementamos a arquitetura completa com tráfego de rede real.
+Nesta etapa, saímos do notebook e avançamos para uma implementação da arquitetura em ambiente Docker, integrando os modelos ao tráfego de rede real.
 
 ---
 
@@ -59,7 +59,7 @@ dual-gam/
 │   ├── gan/
 │   │   ├── models.py        # Defensor e Atacante (nn.Module)
 │   │   ├── trainer.py       # Ciclo co-evolutivo adversarial (20 rodadas)
-│   │   └── preprocessing.py # Carrega CIC-IDS2017, StandardScaler, FEATURE_MAP
+│   │   └── preprocessing.py # Split treino/teste, normalização e FEATURE_MAP
 │   ├── translator/
 │   │   └── translator.py    # Vetor GAN (77 features) → AttackParams Scapy
 │   ├── sender/
@@ -77,35 +77,6 @@ dual-gam/
 └── scripts/
     └── run.sh
 ```
-
----
-
-## Resultados obtidos
-
-### Treino (20 rodadas de co-evolução)
-
-| Rodada | Taxa de Evasão | Acc Defensor |
-|--------|---------------|--------------|
-| 1      | ~74%          | 98.2%        |
-| 5      | ~21%          | 98.3%        |
-| 10     | ~0%           | 98.3%        |
-| 19     | ~24%          | 99.3%        |
-| 20     | ~1%           | 99.2%        |
-
-Comportamento consistente com o experimento inicial: picos de evasão seguidos de supressão pelo defensor, com ressurgimentos ocasionais do atacante.
-
-### Ataque real (10 ciclos, Scapy na bridge Docker)
-
-| Ciclo | Vetores gerados | Evadiram | Taxa |
-|-------|----------------|----------|------|
-| 1     | 100            | 14       | 14%  |
-| 2     | 100            | 28       | 28%  |
-| 3     | 100            | 25       | 25%  |
-| 10    | 100            | 33       | 33%  |
-
-Parâmetros de ataque gerados: ~24k pps, pacotes de 80-278B, flags TCP variando entre SA, SAP, AP, A — coerentes com o perfil DDoS do CIC-IDS2017.
-
-**Nota:** a taxa real de envio do Scapy (~20 pkt/0.5s) é menor que o `pps` pedido pelos AttackParams (~24k) — limitação esperada de raw sockets em container Docker. Em hardware real a taxa seria significativamente maior.
 
 ---
 
@@ -167,13 +138,12 @@ watch -n1 'curl -s http://localhost:8080/metrics | python3 -m json.tool'
 
 ---
 
-## Próximos passos
+## Versões
 
-- [ ] Plano de controle SDN: Traffic Monitor + Extractor + Rule Enforcer (Ryu + Open vSwitch)
-- [ ] Feedback real: retreino do Defensor com tráfego capturado da rede, não só dados do dataset
-- [ ] Hosts legítimos mais realistas (h1-h4 com tráfego HTTP variado)
-- [ ] Métricas de realismo mais sofisticadas no Translator
-- [ ] Comparar com outros tipos de ataque além de DDoS
+| Versão | Alteração |
+|--------|-----------|
+| v1.0 | Implementação inicial |
+| v1.1 | Correção de data leakage |
 
 ---
 
@@ -182,3 +152,4 @@ watch -n1 'curl -s http://localhost:8080/metrics | python3 -m json.tool'
 - **Dataset:** CIC-IDS2017 — Universidade de New Brunswick. [Download](https://www.kaggle.com/datasets/dhoogla/cicids2017)
 - **Survey:** Alauthman et al. (2026). *Generative Adversarial Networks for Intrusion Detection Systems: A Comprehensive Survey.* Arabian Journal for Science and Engineering. [Link](https://link.springer.com/article/10.1007/s13369-026-11103-6)
 - **Experimento inicial:** notebook `teste_dualGam_ic.ipynb` + [post no blog](https://lovepxdro.github.io/sec-lounge/experimentos/experimento-inicial-ic/)
+- **Implementação inicial da arquitetura (v1):** [post no blog](https://lovepxdro.github.io/sec-lounge/experimentos/arquitetura-dual-gam/)
