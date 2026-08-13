@@ -13,29 +13,103 @@ Uso:
 """
 
 import argparse
+import csv
 import json
 import logging
+import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 
-# Logging configurado antes de qualquer import interno.
-logging.basicConfig(
-    level=logging.INFO,
-    format=(
-        "%(asctime)s [%(levelname)s] "
-        "%(name)s — %(message)s"
-    ),
-    datefmt="%H:%M:%S",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(
-            "/logs/h-attack.log"
-        ),
-    ],
-)
+def configurar_logging() -> None:
+    """
+    Mantém o terminal enxuto em INFO e grava detalhes em DEBUG no arquivo.
 
+    Console: acompanhamento operacional do experimento.
+    Arquivo: diagnóstico detalhado para depuração.
+    """
+
+    log_dir = Path("/logs")
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    root = logging.getLogger()
+    root.setLevel(logging.DEBUG)
+    root.handlers.clear()
+
+    console = logging.StreamHandler(sys.stdout)
+    console.setLevel(logging.INFO)
+    console.setFormatter(
+        logging.Formatter("%(message)s")
+    )
+
+    arquivo = logging.FileHandler(
+        log_dir / "h-attack.log",
+        encoding="utf-8",
+    )
+    arquivo.setLevel(logging.DEBUG)
+    arquivo.setFormatter(
+        logging.Formatter(
+            "%(asctime)s [%(levelname)s] "
+            "%(name)s — %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
+
+    root.addHandler(console)
+    root.addHandler(arquivo)
+
+    # Bibliotecas de visualização podem emitir mensagens operacionais
+    # (por exemplo, criação do fontManager) que não pertencem ao experimento.
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
+
+
+configurar_logging()
 logger = logging.getLogger("main")
+
+
+def criar_diretorio_experimento(models_root: Path, seed: int) -> tuple[str, Path]:
+    experiments_dir = models_root / "experiments"
+    experiments_dir.mkdir(parents=True, exist_ok=True)
+
+    base = datetime.now().strftime("run_%Y%m%d_%H%M%S") + f"_seed{seed}"
+    run_id = base
+    run_dir = experiments_dir / run_id
+    sufixo = 1
+    while run_dir.exists():
+        run_id = f"{base}_{sufixo:02d}"
+        run_dir = experiments_dir / run_id
+        sufixo += 1
+
+    for subdir in ("checkpoints", "metrics", "plots", "logs"):
+        (run_dir / subdir).mkdir(parents=True, exist_ok=True)
+
+    return run_id, run_dir
+
+
+def adicionar_log_experimento(run_dir: Path) -> None:
+    handler = logging.FileHandler(
+        run_dir / "logs" / "train.log",
+        encoding="utf-8",
+    )
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
+    logging.getLogger().addHandler(handler)
+
+
+def atualizar_latest(models_root: Path, run_dir: Path) -> None:
+    latest = models_root / "latest"
+    if latest.is_symlink() or latest.exists():
+        if latest.is_dir() and not latest.is_symlink():
+            raise RuntimeError(f"{latest} existe e não é um symlink")
+        latest.unlink()
+    latest.symlink_to(run_dir.relative_to(models_root), target_is_directory=True)
+
 
 
 def cmd_train(
@@ -49,12 +123,29 @@ def cmd_train(
         TrainingConfig,
         definir_seed,
     )
-
-    logger.info("=== MODO TREINO ===")
-    logger.info(
-        "Dataset: %s",
-        args.data,
+    from gan.reporting import (
+        gerar_graficos,
+        salvar_metricas_csv,
+        salvar_summary,
     )
+
+    models_root = Path(args.models_dir)
+    run_id, run_dir = criar_diretorio_experimento(models_root, args.seed)
+    adicionar_log_experimento(run_dir)
+
+    logger.info("=== Dual-GAM | Treinamento ===")
+    logger.info(
+        "  Dataset: %s | Seed: %d | Device: %s | "
+        "Rodadas: %d | Epochs/rodada: %d",
+        args.data,
+        args.seed,
+        args.device,
+        args.rodadas,
+        args.epochs,
+    )
+    logger.info("  Experimento: %s", run_id)
+    logger.info("")
+    logger.info("[1/4] Preparando dataset")
 
     # A seed deve ser definida antes:
     # - do split;
@@ -69,19 +160,23 @@ def cmd_train(
         args.data
     )
 
-    X_train, X_test, y_train, y_test = (
-        prep.split_e_normalizar(
-            X,
-            y,
-            random_state=args.seed,
-        )
+    (
+        X_train,
+        X_val,
+        X_test,
+        y_train,
+        y_val,
+        y_test,
+    ) = prep.split_e_normalizar(
+        X,
+        y,
+        test_size=0.2,
+        validation_size=0.1,
+        random_state=args.seed,
     )
 
     # Salvar preprocessador.
-    prep.salvar(
-        Path(args.models_dir)
-        / "preprocessador"
-    )
+    prep.salvar(run_dir / "preprocessador")
 
     # Salvar amostras reais de DDoS
     # provenientes exclusivamente do treino.
@@ -95,14 +190,16 @@ def cmd_train(
 
     _torch.save(
         X_ddos_export,
-        Path(args.models_dir)
-        / "ddos_samples.pt",
+        run_dir / "ddos_samples.pt",
     )
 
     logger.info(
-        "Amostras DDoS exportadas: %d",
+        "  Amostras DDoS exportadas: %d",
         len(X_ddos_export),
     )
+
+    logger.info("")
+    logger.info("[2/4] Configurando experimento")
 
     # 2. Configuração do treinamento.
     cfg = TrainingConfig(
@@ -112,9 +209,7 @@ def cmd_train(
         n_rodadas=args.rodadas,
         epochs_por_rodada=args.epochs,
         device=args.device,
-        checkpoint_dir=Path(
-            args.models_dir
-        ),
+        checkpoint_dir=run_dir / "checkpoints",
     )
 
     # 3. Criar Trainer.
@@ -123,12 +218,15 @@ def cmd_train(
     # Salvar configuração completa da execução
     # antes de iniciar o treinamento.
     config_execucao = {
+        "run_id": run_id,
+        "created_at": datetime.now().isoformat(timespec="seconds"),
         "seed": cfg.seed,
         "dataset": str(args.data),
 
         "dados": {
             "input_dim": cfg.input_dim,
             "noise_dim": cfg.noise_dim,
+            "validation_size": 0.1,
             "test_size": 0.2,
         },
 
@@ -139,6 +237,10 @@ def cmd_train(
                 cfg.adam_betas
             ),
             "epsilon": cfg.epsilon,
+            "classification_threshold": cfg.classification_threshold,
+            "amostras_avaliacao_adversarial": (
+                cfg.amostras_avaliacao_adversarial
+            ),
             "epochs_pretrain": (
                 cfg.epochs_pretrain
             ),
@@ -163,10 +265,7 @@ def cmd_train(
         },
     }
 
-    config_path = (
-        Path(args.models_dir)
-        / "config_execucao.json"
-    )
+    config_path = run_dir / "config_execucao.json"
 
     with open(
         config_path,
@@ -180,40 +279,56 @@ def cmd_train(
             ensure_ascii=False,
         )
 
-    logger.info(
-        "Configuração da execução salva em %s",
-        config_path,
-    )
+    logger.info("  Configuração: OK")
+    logger.debug("Configuração salva em %s", config_path)
+
+    logger.info("")
+    logger.info("[3/4] Executando treinamento")
 
     # 4. Treino adversarial.
     trainer.carregar_dados(
         X_train,
         y_train,
+        X_val,
+        y_val,
         X_test,
         y_test,
     )
 
     trainer.pretreinar_defensor()
 
+    # D0: Defensor após o pré-treino e antes de qualquer adaptação adversarial.
+    trainer.salvar_defensor_inicial()
+
     historico = trainer.rodar_ciclo()
+
+    logger.info("")
+    logger.info("  Avaliando robustez acumulada")
+    avaliacao_cruzada = trainer.avaliar_matriz_checkpoints()
+    historico["avaliacao_cruzada_checkpoints"] = avaliacao_cruzada
+
+    # O conjunto de teste é reservado para a avaliação final.
+    metricas_teste_final = trainer.medir_metricas_teste_final()
+    historico["metricas_defensor_teste_final"] = metricas_teste_final
+    # Compatibilidade com históricos anteriores.
+    historico["acuracia_defensor_teste_final"] = metricas_teste_final["accuracy"]
+
+    logger.info("")
+    logger.info("[4/4] Salvando resultados")
 
     # 5. Salvar modelos finais.
     import torch
 
-    models_path = Path(
-        args.models_dir
-    )
+    models_path = run_dir
 
     torch.save(
         trainer.atacante.state_dict(),
-        models_path
-        / "atacante_final.pth",
+        models_path / "checkpoints" / "atacante_final.pth",
     )
 
     torch.save(
         trainer.defensor.state_dict(),
-        models_path
-        / "defensor_adaptativo_final.pth",
+        models_path / "checkpoints" / "defensor_adaptativo_final.pth",
     )
 
     # 6. Salvar histórico.
@@ -233,36 +348,107 @@ def cmd_train(
             indent=2,
         )
 
-    logger.info(
-        "Histórico salvo em %s",
-        historico_path,
-    )
+    matriz_path = models_path / "matriz_checkpoints.json"
+    with open(
+        matriz_path,
+        "w",
+        encoding="utf-8",
+    ) as f:
+        json.dump(
+            avaliacao_cruzada,
+            f,
+            indent=2,
+        )
 
-    logger.info(
-        "=== TREINO CONCLUÍDO ==="
-    )
+    # A matriz completa também é persistida como CSV para inspeção humana,
+    # análise estatística e geração posterior de heatmaps.
+    matriz_csv_path = models_path / "matriz_checkpoints.csv"
+    colunas_defensores = avaliacao_cruzada["colunas_defensores"]
+    linhas_atacantes = avaliacao_cruzada["linhas_atacantes"]
+    matriz_evasao = avaliacao_cruzada["matriz_evasao"]
 
-    taxa_final = (
-        historico["taxa_evasao"][-1]
+    with open(
+        matriz_csv_path,
+        "w",
+        encoding="utf-8",
+        newline="",
+    ) as f:
+        writer = csv.writer(f)
+        writer.writerow(
+            ["Atacante"]
+            + [f"D{d}" for d in colunas_defensores]
+        )
+
+        for atacante, linha in zip(
+            linhas_atacantes,
+            matriz_evasao,
+        ):
+            writer.writerow(
+                [f"A{atacante}"]
+                + [f"{valor * 100:.4f}" for valor in linha]
+            )
+
+    metric_paths = salvar_metricas_csv(historico, run_dir / "metrics")
+    summary_path = run_dir / "summary.json"
+    salvar_summary(config_execucao, historico, summary_path)
+    plot_paths = gerar_graficos(historico, run_dir / "plots")
+    atualizar_latest(models_root, run_dir)
+
+    logger.info("  Histórico: OK")
+    logger.info("  Matriz de checkpoints: JSON + CSV")
+    logger.info("  Métricas: Defensor + Atacante")
+    logger.info("  Resumo: OK")
+    logger.info("  Gráficos: %d gerados", len(plot_paths))
+    logger.info("  Experimento ativo: %s", run_id)
+
+    logger.debug("Histórico salvo em %s", historico_path)
+    logger.debug("Matriz de checkpoints (JSON) salva em %s", matriz_path)
+    logger.debug("Matriz de checkpoints (CSV) salva em %s", matriz_csv_path)
+    logger.debug("Métricas do Defensor salvas em %s", metric_paths["defender"])
+    logger.debug("Métricas do Atacante salvas em %s", metric_paths["attacker"])
+    logger.debug("Resumo salvo em %s", summary_path)
+    logger.debug("Gráficos salvos em %s", run_dir / "plots")
+    logger.debug("Latest atualizado: %s -> %s", models_root / "latest", run_dir)
+
+    logger.info("")
+    logger.info("=== Treinamento concluído ===")
+
+    evasao_pre_final = (
+        historico["taxa_evasao_pre_adaptacao"][-1]
         * 100
     )
 
-    acc_final = (
-        historico[
-            "acuracia_defensor"
-        ][-1]
+    evasao_pos_final = (
+        historico["taxa_evasao_pos_adaptacao"][-1]
         * 100
     )
 
     logger.info(
-        "Taxa de evasão final: %.1f%%",
-        taxa_final,
+        "  Evasão final pré-adaptação: %.1f%%",
+        evasao_pre_final,
     )
-
     logger.info(
-        "Acurácia defensor final: %.2f%%",
-        acc_final,
+        "  Evasão final pós-adaptação: %.1f%%",
+        evasao_pos_final,
     )
+    logger.info(
+        "  Teste reservado: Acc %.2f%% | Precision %.2f%% | Recall %.2f%% | "
+        "F1 %.2f%% | FPR %.2f%% | FNR %.2f%% | ROC-AUC %.4f",
+        metricas_teste_final["accuracy"] * 100,
+        metricas_teste_final["precision"] * 100,
+        metricas_teste_final["recall"] * 100,
+        metricas_teste_final["f1"] * 100,
+        metricas_teste_final["fpr"] * 100,
+        metricas_teste_final["fnr"] * 100,
+        metricas_teste_final["roc_auc"],
+    )
+    tn, fp = metricas_teste_final["confusion_matrix"][0]
+    fn, tp = metricas_teste_final["confusion_matrix"][1]
+
+    logger.info("  Matriz de confusão final:")
+    logger.info("                 Pred. Benigno   Pred. DDoS")
+    logger.info("    Real Benigno   %12d   %10d", tn, fp)
+    logger.info("    Real DDoS      %12d   %10d", fn, tp)
 
 
 def cmd_attack(
@@ -276,11 +462,11 @@ def cmd_attack(
     )
 
     logger.info(
-        "=== MODO %s ===",
+        "=== Dual-GAM | %s ===",
         (
-            "DRY-RUN"
+            "Dry-run"
             if dry_run
-            else "ATAQUE"
+            else "Ataque"
         ),
     )
 
@@ -293,15 +479,13 @@ def cmd_attack(
     controller = AttackController(
         target_ip=args.target,
         target_port=args.port,
-        models_dir=Path(
-            args.models_dir
-        ),
-        preprocessador_dir=(
-            Path(args.models_dir)
-            / "preprocessador"
-        ),
+        models_dir=Path(args.models_dir),
+        preprocessador_dir=None,
         dry_run=dry_run,
         device=args.device,
+        checkpoint_mode=args.checkpoint_mode,
+        attacker_round=args.attacker_round,
+        defender_round=args.defender_round,
     )
 
     controller.executar_loop(
@@ -310,6 +494,47 @@ def cmd_attack(
             args.intervalo
         ),
         n_vetores=args.n_vetores,
+    )
+
+
+def adicionar_argumentos_checkpoint(
+    parser: argparse.ArgumentParser,
+) -> None:
+    """Adiciona opções de seleção de checkpoints a attack e dry-run."""
+
+    parser.add_argument(
+        "--checkpoint-mode",
+        choices=[
+            "demo",
+            "final",
+            "explicit",
+        ],
+        default="demo",
+        help=(
+            "demo: maior evasão A_r x D_(r-1); "
+            "final: modelos finais; "
+            "explicit: rodadas informadas manualmente"
+        ),
+    )
+
+    parser.add_argument(
+        "--attacker-round",
+        type=int,
+        default=None,
+        help=(
+            "Rodada do Atacante no modo explicit "
+            "(mínimo 1)"
+        ),
+    )
+
+    parser.add_argument(
+        "--defender-round",
+        type=int,
+        default=None,
+        help=(
+            "Rodada do Defensor no modo explicit "
+            "(0 representa D0, o Defensor pré-treinado)"
+        ),
     )
 
 
@@ -419,6 +644,10 @@ def main() -> None:
         default=100,
     )
 
+    adicionar_argumentos_checkpoint(
+        p_attack
+    )
+
     # ── dry-run ───────────────────────────
 
     p_dry = sub.add_parser(
@@ -458,11 +687,11 @@ def main() -> None:
         default=20,
     )
 
-    args = parser.parse_args()
-
-    Path("/logs").mkdir(
-        exist_ok=True
+    adicionar_argumentos_checkpoint(
+        p_dry
     )
+
+    args = parser.parse_args()
 
     if args.cmd == "train":
         cmd_train(args)

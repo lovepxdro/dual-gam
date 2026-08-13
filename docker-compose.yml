@@ -1,13 +1,14 @@
 # Dual-GAM — Topologia de rede Docker
 #
-# Mapeia o diagrama da IC:
-#   h1-h4  (hosts legítimos)  →  bridge ddos-net
-#   h-attack (fonte do ataque) →  bridge ddos-net
-#   s1 (switch)               →  bridge ddos-net  (simulado pela bridge Docker)
-#   h-target (servidor alvo)  →  bridge ddos-net
+# Estado atual:
+#   h1-h4    → hosts legítimos simplificados
+#   h-attack → fonte do ataque
+#   h-target → servidor alvo
+#   ddos-net → bridge Docker que representa provisoriamente o plano de dados
 #
-# O "switch s1" é a bridge Docker ddos-net (172.20.0.0/24).
-# Em iterações futuras, será substituído por Open vSwitch + Ryu SDN.
+# Evolução prevista:
+#   substituir a bridge por Open vSwitch + Ryu e introduzir a camada de
+#   controle (Traffic Monitor → Feature Extractor → Defensor → Rule Enforcer).
 
 networks:
   ddos-net:
@@ -17,8 +18,7 @@ networks:
         - subnet: 172.20.0.0/24
 
 volumes:
-  models:        # modelos GAN compartilhados entre treino e ataque
-  data:          # dataset CIC-IDS2017
+  models:
   logs:
 
 services:
@@ -33,11 +33,12 @@ services:
       ddos-net:
         ipv4_address: 172.20.0.10
     ports:
-      - "8080:80"        # acesso externo para debug
+      - "8080:80"
     restart: unless-stopped
 
   # ── Hosts legítimos (tráfego benigno) ─────────────────────────────────
-  # Simulam os h1-h4 do diagrama com curl em loop
+  # Mantidos como base da futura avaliação online. Hoje ainda usam padrões
+  # simples de curl em loop; na v2.0 devem gerar tráfego HTTP mais variado.
   h1:
     image: curlimages/curl:latest
     container_name: h1
@@ -82,24 +83,23 @@ services:
     restart: unless-stopped
     depends_on: [h-target]
 
-  # ── Treino (roda uma vez, depois pode ser removido) ────────────────────
+  # ── Treino offline ─────────────────────────────────────────────────────
+  # O dataset é montado diretamente pelo scripts/run.sh. A rede permanece
+  # definida no projeto, mas não precisa ser iniciada para o treino atual.
   h-attack-train:
+    image: dual-gam-h-attack:local
     build:
       context: .
       dockerfile: docker/Dockerfile.h-attack
     container_name: h-attack-train
-    networks:
-      ddos-net:
-        ipv4_address: 172.20.0.30
     volumes:
       - models:/models
-      - data:/data
       - logs:/logs
-    command: ["train", "--data", "/data/DDoS-Friday-no-metadata.parquet", "--rodadas", "20"]
-    profiles: ["train"]    # só roda com: docker compose --profile train up
+    profiles: ["train"]
 
-  # ── Atacante (roda após o treino) ──────────────────────────────────────
+  # ── Atacante real ──────────────────────────────────────────────────────
   h-attack:
+    image: dual-gam-h-attack:local
     build:
       context: .
       dockerfile: docker/Dockerfile.h-attack
@@ -111,14 +111,14 @@ services:
       - models:/models
       - logs:/logs
     cap_add:
-      - NET_RAW          # necessário para raw sockets do Scapy
+      - NET_RAW
       - NET_ADMIN
-    command: ["attack", "--target", "172.20.0.10", "--port", "80", "--ciclos", "10"]
     depends_on: [h-target]
-    profiles: ["attack"]  # só roda com: docker compose --profile attack up
+    profiles: ["attack"]
 
-  # ── Dry-run (para testes sem enviar pacotes reais) ────────────────────
+  # ── Dry-run ────────────────────────────────────────────────────────────
   h-attack-dry:
+    image: dual-gam-h-attack:local
     build:
       context: .
       dockerfile: docker/Dockerfile.h-attack
@@ -129,6 +129,5 @@ services:
     volumes:
       - models:/models
       - logs:/logs
-    command: ["dry-run", "--target", "172.20.0.10", "--ciclos", "3"]
     depends_on: [h-target]
     profiles: ["dry-run"]

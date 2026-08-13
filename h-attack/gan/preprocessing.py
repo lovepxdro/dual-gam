@@ -1,10 +1,14 @@
 """
 Dual-GAM — Pré-processamento de dados
 
-Carrega o CIC-IDS2017, realiza auditoria do dataset, divide treino/teste
-e normaliza os dados.
+Carrega o CIC-IDS2017, realiza auditoria do dataset, remove duplicatas exatas,
+divide os dados em train/validation/test e normaliza os conjuntos.
 
-O StandardScaler é ajustado exclusivamente sobre o conjunto de treino.
+Regras metodológicas:
+- nenhuma estatística do conjunto de validação/teste participa do fit do scaler;
+- duplicatas exatas (features + label) são removidas antes do split;
+- os três conjuntos são auditados por hash e qualquer interseção interrompe a execução;
+- o preprocessador persistido é exatamente o utilizado no treino.
 """
 
 from __future__ import annotations
@@ -21,8 +25,8 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 logger = logging.getLogger(__name__)
 
 
-# Features do CIC-IDS2017 que mapeiam para parâmetros de rede reais.
-# Usado pelo Translator para saber quais colunas correspondem ao quê.
+# Mantido por compatibilidade com componentes antigos. O Translator atualizado
+# prefere resolver as features pelo nome salvo em ``feature_names``.
 FEATURE_MAP = {
     "flow_duration": 0,
     "fwd_packet_length_max": 4,
@@ -53,47 +57,43 @@ FEATURE_MAP = {
 
 
 class Preprocessador:
-    """Carrega, audita e normaliza o dataset CIC-IDS2017."""
+    """Carrega, audita, separa e normaliza o dataset CIC-IDS2017."""
 
     def __init__(self):
         self.scaler = StandardScaler()
         self.label_encoder = LabelEncoder()
         self.feature_names: list[str] = []
+        self.audit_info: dict[str, object] = {}
 
     def carregar_parquet(
         self,
         path: str | Path,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Carrega e limpa o arquivo .parquet do CIC-IDS2017.
-
-        Os dados ainda não são normalizados neste ponto, pois o split
-        treino/teste deve ocorrer antes do ajuste do StandardScaler.
-        """
-        logger.info("Carregando dataset: %s", path)
+        """Carrega e limpa o .parquet sem normalizar os dados."""
+        logger.info("  Carregando dataset: %s", path)
 
         df = pd.read_parquet(path)
+        if "Label" not in df.columns:
+            raise ValueError("Dataset sem coluna obrigatória 'Label'")
 
         logger.info(
-            "Shape: %s | Classes: %s",
+            "  Shape: %s | Classes: %s",
             df.shape,
             df["Label"].value_counts().to_dict(),
         )
 
-        X = df.drop(columns=["Label"]).astype(np.float32)
-        y = df["Label"]
+        X = df.drop(columns=["Label"]).copy()
+        y = df["Label"].copy()
 
-        self.feature_names = X.columns.tolist()
+        # Garante que todo o espaço de features seja numérico e finito.
+        X = X.apply(pd.to_numeric, errors="coerce")
+        X = X.replace([np.inf, -np.inf], np.nan).fillna(0.0)
 
-        # Limpeza de valores inválidos.
-        X = X.replace([np.inf, -np.inf], np.nan).fillna(0)
-
-        # Encoding dos labels.
-        # Benign = 0, DDoS = 1, conforme ordenação do LabelEncoder.
+        self.feature_names = X.columns.astype(str).tolist()
         y_encoded = self.label_encoder.fit_transform(y)
 
         logger.info(
-            "Classes: %s",
+            "  Classes mapeadas: %s",
             dict(
                 zip(
                     self.label_encoder.classes_,
@@ -107,115 +107,158 @@ class Preprocessador:
             y_encoded.astype(np.float32),
         )
 
+    def _dataframe_com_label(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+    ) -> pd.DataFrame:
+        if X.ndim != 2:
+            raise ValueError("X deve possuir shape [N, features]")
+        if len(X) != len(y):
+            raise ValueError("X e y possuem quantidades diferentes de amostras")
+        if self.feature_names and X.shape[1] != len(self.feature_names):
+            raise ValueError(
+                "Número de features incompatível com feature_names: "
+                f"{X.shape[1]} != {len(self.feature_names)}"
+            )
+
+        columns = self.feature_names or [f"feature_{i}" for i in range(X.shape[1])]
+        df = pd.DataFrame(X, columns=columns)
+        df["_label"] = y
+        return df
+
     def auditar_duplicatas(
         self,
         X: np.ndarray,
         y: np.ndarray,
     ) -> int:
-        """
-        Detecta amostras duplicadas no dataset.
+        """Conta duplicatas exatas considerando features + label."""
+        df = self._dataframe_com_label(X, y)
+        duplicadas = int(df.duplicated(keep="first").sum())
 
-        A comparação considera todas as features e o label.
-        A primeira ocorrência é considerada original; ocorrências
-        posteriores idênticas são contabilizadas como duplicatas.
-        """
-        df = pd.DataFrame(
-            X,
-            columns=self.feature_names,
-        )
-
-        df["_label"] = y
-
-        duplicadas = int(df.duplicated().sum())
-
-        if duplicadas > 0:
-            logger.warning(
-                "Auditoria — amostras duplicadas no dataset: %d",
-                duplicadas,
-            )
+        if duplicadas:
+            logger.warning("    Duplicatas exatas no dataset: %d", duplicadas)
         else:
-            logger.info(
-                "Auditoria — amostras duplicadas no dataset: 0"
-            )
+            logger.info("    Duplicatas exatas no dataset: 0")
 
         return duplicadas
 
-    def auditar_intersecao(
+    def remover_duplicatas(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray, int]:
+        """
+        Remove duplicatas exatas antes do split.
+
+        A remoção ocorre sobre ``features + label``. Isso evita que cópias da
+        mesma observação terminem em conjuntos distintos e contaminem a avaliação.
+        """
+        df = self._dataframe_com_label(X, y)
+        duplicate_mask = df.duplicated(keep="first")
+        n_removed = int(duplicate_mask.sum())
+
+        if n_removed == 0:
+            return X, y, 0
+
+        keep = ~duplicate_mask.to_numpy()
+        X_unique = X[keep]
+        y_unique = y[keep]
+
+        logger.warning(
+            "    Duplicatas removidas antes do split: %d | amostras restantes: %d",
+            n_removed,
+            len(X_unique),
+        )
+        return X_unique, y_unique, n_removed
+
+    def _hashes(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+    ) -> set[int]:
+        df = self._dataframe_com_label(X, y)
+        return set(
+            pd.util.hash_pandas_object(
+                df,
+                index=False,
+            ).to_numpy(dtype=np.uint64)
+        )
+
+    def auditar_isolamento_triplo(
         self,
         X_train: np.ndarray,
         y_train: np.ndarray,
+        X_val: np.ndarray,
+        y_val: np.ndarray,
         X_test: np.ndarray,
         y_test: np.ndarray,
-    ) -> int:
-        """
-        Verifica se existem amostras idênticas em treino e teste.
+    ) -> dict[str, int]:
+        """Verifica interseções exatas entre treino, validação e teste."""
+        hashes_train = self._hashes(X_train, y_train)
+        hashes_val = self._hashes(X_val, y_val)
+        hashes_test = self._hashes(X_test, y_test)
 
-        Cada amostra é representada por um hash calculado sobre
-        todas as features e o respectivo label.
-        """
-        train_df = pd.DataFrame(
-            X_train,
-            columns=self.feature_names,
+        intersecoes = {
+            "treino_validacao": len(hashes_train & hashes_val),
+            "treino_teste": len(hashes_train & hashes_test),
+            "validacao_teste": len(hashes_val & hashes_test),
+        }
+
+        logger.info(
+            "    Interseção treino/validação: %d",
+            intersecoes["treino_validacao"],
         )
-        train_df["_label"] = y_train
-
-        test_df = pd.DataFrame(
-            X_test,
-            columns=self.feature_names,
+        logger.info(
+            "    Interseção treino/teste: %d",
+            intersecoes["treino_teste"],
         )
-        test_df["_label"] = y_test
-
-        train_hashes = set(
-            pd.util.hash_pandas_object(
-                train_df,
-                index=False,
-            ).to_numpy()
-        )
-
-        test_hashes = set(
-            pd.util.hash_pandas_object(
-                test_df,
-                index=False,
-            ).to_numpy()
+        logger.info(
+            "    Interseção validação/teste: %d",
+            intersecoes["validacao_teste"],
         )
 
-        intersecao = train_hashes.intersection(test_hashes)
-        quantidade = len(intersecao)
-
-        if quantidade > 0:
-            logger.error(
-                "Auditoria — interseção treino/teste: %d amostras",
-                quantidade,
-            )
-        else:
-            logger.info(
-                "Auditoria — interseção treino/teste: 0 amostras"
-            )
-            logger.info(
-                "Auditoria — isolamento treino/teste: OK"
+        if any(intersecoes.values()):
+            raise RuntimeError(
+                "Data leakage detectado entre treino, validação e teste: "
+                f"{intersecoes}"
             )
 
-        return quantidade
+        logger.info("    Isolamento treino/validação/teste: OK")
+        return intersecoes
 
     def split_e_normalizar(
         self,
         X: np.ndarray,
         y: np.ndarray,
         test_size: float = 0.2,
+        validation_size: float = 0.1,
         random_state: int = 42,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+    ]:
         """
-        Audita o dataset, divide treino/teste e normaliza os dados.
+        Remove duplicatas, divide em treino/validação/teste e normaliza.
 
-        O StandardScaler é ajustado exclusivamente sobre o conjunto
-        de treino e depois aplicado separadamente ao treino e ao teste.
+        Por padrão: 70% treino, 10% validação e 20% teste.
+        O StandardScaler é ajustado exclusivamente sobre o conjunto de treino.
         """
+        if test_size <= 0 or validation_size <= 0:
+            raise ValueError("test_size e validation_size devem ser > 0")
+        if test_size + validation_size >= 1:
+            raise ValueError("test_size + validation_size deve ser menor que 1")
 
-        # Auditoria global antes do split.
-        self.auditar_duplicatas(X, y)
+        logger.info("  Auditoria:")
+        n_duplicates = self.auditar_duplicatas(X, y)
+        X, y, n_removed = self.remover_duplicatas(X, y)
 
-        # Divisão treino/teste.
-        X_train, X_test, y_train, y_test = train_test_split(
+        # 1) Separa o teste final.
+        X_temp, X_test, y_temp, y_test = train_test_split(
             X,
             y,
             test_size=test_size,
@@ -223,61 +266,74 @@ class Preprocessador:
             stratify=y,
         )
 
+        # 2) Retira a validação do bloco restante mantendo a proporção global.
+        validation_relative = validation_size / (1.0 - test_size)
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_temp,
+            y_temp,
+            test_size=validation_relative,
+            random_state=random_state,
+            stratify=y_temp,
+        )
+
         logger.info(
-            "Split concluído — treino: %d | teste: %d",
+            "  Split: treino=%d | validação=%d | teste=%d",
             len(X_train),
+            len(X_val),
             len(X_test),
         )
 
-        # Auditoria de isolamento entre treino e teste.
-        intersecao = self.auditar_intersecao(
+        intersecoes = self.auditar_isolamento_triplo(
             X_train,
             y_train,
+            X_val,
+            y_val,
             X_test,
             y_test,
         )
 
-        # Não permitir treinamento com conjuntos contaminados.
-        if intersecao > 0:
-            raise RuntimeError(
-                "Data leakage detectado: "
-                f"{intersecao} amostras idênticas aparecem "
-                "simultaneamente nos conjuntos de treino e teste."
-            )
-
-        # StandardScaler ajustado SOMENTE no conjunto de treino.
+        logger.info("  Normalização:")
         X_train_scaled = self.scaler.fit_transform(X_train)
-
-        # Teste utiliza apenas as estatísticas aprendidas no treino.
+        X_val_scaled = self.scaler.transform(X_val)
         X_test_scaled = self.scaler.transform(X_test)
 
-        logger.info(
-            "Média absoluta do treino normalizado: %.6f",
-            float(
-                np.abs(
-                    X_train_scaled.mean(axis=0)
-                ).mean()
-            ),
-        )
+        train_mean = float(np.abs(X_train_scaled.mean(axis=0)).mean())
+        val_mean = float(np.abs(X_val_scaled.mean(axis=0)).mean())
+        test_mean = float(np.abs(X_test_scaled.mean(axis=0)).mean())
 
-        logger.info(
-            "Média absoluta do teste normalizado: %.6f",
-            float(
-                np.abs(
-                    X_test_scaled.mean(axis=0)
-                ).mean()
-            ),
-        )
+        logger.info("    Média abs. treino:    %.6f", train_mean)
+        logger.info("    Média abs. validação: %.6f", val_mean)
+        logger.info("    Média abs. teste:     %.6f", test_mean)
+
+        self.audit_info = {
+            "duplicatas_detectadas": n_duplicates,
+            "duplicatas_removidas": n_removed,
+            "amostras_pos_deduplicacao": int(len(X)),
+            "split": {
+                "treino": int(len(X_train)),
+                "validacao": int(len(X_val)),
+                "teste": int(len(X_test)),
+            },
+            "intersecoes": intersecoes,
+            "media_abs_normalizada": {
+                "treino": train_mean,
+                "validacao": val_mean,
+                "teste": test_mean,
+            },
+            "random_state": int(random_state),
+        }
 
         return (
             X_train_scaled.astype(np.float32),
+            X_val_scaled.astype(np.float32),
             X_test_scaled.astype(np.float32),
             y_train.astype(np.float32),
+            y_val.astype(np.float32),
             y_test.astype(np.float32),
         )
 
     def salvar(self, path: str | Path) -> None:
-        """Salva scaler e encoder para uso no Translator."""
+        """Salva scaler, encoder, nomes das features e auditoria."""
         path = Path(path)
         path.mkdir(parents=True, exist_ok=True)
 
@@ -290,10 +346,11 @@ class Preprocessador:
         with open(path / "feature_names.pkl", "wb") as f:
             pickle.dump(self.feature_names, f)
 
-        logger.info(
-            "Preprocessador salvo em %s",
-            path,
-        )
+        with open(path / "audit_info.pkl", "wb") as f:
+            pickle.dump(self.audit_info, f)
+
+        logger.info("  Preprocessador: OK")
+        logger.debug("Preprocessador salvo em %s", path)
 
     @classmethod
     def carregar(
@@ -302,7 +359,6 @@ class Preprocessador:
     ) -> "Preprocessador":
         """Carrega scaler, encoder e nomes das features."""
         path = Path(path)
-
         obj = cls()
 
         with open(path / "scaler.pkl", "rb") as f:
@@ -314,11 +370,24 @@ class Preprocessador:
         with open(path / "feature_names.pkl", "rb") as f:
             obj.feature_names = pickle.load(f)
 
+        audit_path = path / "audit_info.pkl"
+        if audit_path.exists():
+            with open(audit_path, "rb") as f:
+                obj.audit_info = pickle.load(f)
+
         return obj
 
     def desnormalizar(
         self,
         X_scaled: np.ndarray,
     ) -> np.ndarray:
-        """Converte os dados normalizados de volta à escala original."""
+        """Converte dados normalizados de volta à escala original."""
+        X_scaled = np.asarray(X_scaled, dtype=np.float64)
+        if X_scaled.ndim != 2:
+            raise ValueError("X_scaled deve possuir shape [N, features]")
+        if X_scaled.shape[1] != len(self.scaler.mean_):
+            raise ValueError(
+                "Número de features incompatível com o scaler: "
+                f"{X_scaled.shape[1]} != {len(self.scaler.mean_)}"
+            )
         return self.scaler.inverse_transform(X_scaled)

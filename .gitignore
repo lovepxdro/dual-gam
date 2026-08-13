@@ -1,6 +1,9 @@
 # Dataset (grande demais para o repo)
 data/
 
+# Resultados
+results/
+
 # PyTorch wheel local
 docker/*.whl
 
