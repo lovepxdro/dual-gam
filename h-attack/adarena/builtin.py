@@ -27,6 +27,10 @@ CICIDS2017_DATASET_ID = (
     "adarena.cicids2017"
 )
 
+ADVERSARIAL_PROTOCOL_ID = (
+    "adarena.adversarial_training"
+)
+
 
 def _create_perturbation_attacker(
     noise_dim: int = 32,
@@ -62,10 +66,32 @@ def _create_cicids2017_dataset(
 ):
     return CICIDS2017Dataset(
         label_column=label_column,
+
         benign_labels=tuple(
             benign_labels
         ),
-        attack_labels=attack_labels,
+
+        attack_labels=(
+            attack_labels
+        ),
+    )
+
+
+def _create_adversarial_protocol(
+    **_,
+):
+    # Import tardio para evitar ciclo:
+    #
+    # builtin
+    #   → protocols.adversarial
+    #   → gan.trainer
+    #   → builtin
+    from .protocols.adversarial import (
+        AdversarialTrainingProtocol,
+    )
+
+    return (
+        AdversarialTrainingProtocol()
     )
 
 
@@ -78,20 +104,33 @@ def register_builtin_components(
             component_id=(
                 PERTURBATION_ATTACKER_ID
             ),
-            kind=ComponentKind.ATTACKER,
-            name="Perturbation Attacker",
+
+            kind=(
+                ComponentKind.ATTACKER
+            ),
+
+            name=(
+                "Perturbation Attacker"
+            ),
+
             version="1.7",
+
             description=(
-                "Atacante da linha 1.x: aprende "
-                "perturbações adversariais sobre "
-                "amostras reais."
+                "Atacante da linha 1.x "
+                "baseado em perturbação "
+                "adversarial."
             ),
+
             input_representation=(
-                DataRepresentation.FLOW_FEATURES
+                DataRepresentation
+                .FLOW_FEATURES
             ),
+
             output_representation=(
-                DataRepresentation.FLOW_FEATURES
+                DataRepresentation
+                .FLOW_FEATURES
             ),
+
             tags=(
                 "builtin",
                 "pytorch",
@@ -99,6 +138,7 @@ def register_builtin_components(
                 "legacy-v1",
             ),
         ),
+
         _create_perturbation_attacker,
     )
 
@@ -107,20 +147,32 @@ def register_builtin_components(
             component_id=(
                 BINARY_MLP_DEFENDER_ID
             ),
-            kind=ComponentKind.DEFENDER,
-            name="Binary MLP Defender",
+
+            kind=(
+                ComponentKind.DEFENDER
+            ),
+
+            name=(
+                "Binary MLP Defender"
+            ),
+
             version="1.7",
+
             description=(
-                "Classificador binário de referência "
-                "da ADArena."
+                "Classificador binário "
+                "de referência da ADArena."
             ),
+
             input_representation=(
-                DataRepresentation.FLOW_FEATURES
+                DataRepresentation
+                .FLOW_FEATURES
             ),
+
             output_representation=(
                 DataRepresentation
                 .BINARY_CLASSIFICATION
             ),
+
             tags=(
                 "builtin",
                 "pytorch",
@@ -128,6 +180,7 @@ def register_builtin_components(
                 "legacy-v1",
             ),
         ),
+
         _create_binary_mlp_defender,
     )
 
@@ -136,36 +189,81 @@ def register_builtin_components(
             component_id=(
                 CICIDS2017_DATASET_ID
             ),
-            kind=ComponentKind.DATASET,
+
+            kind=(
+                ComponentKind.DATASET
+            ),
+
             name="CIC-IDS2017",
+
             version="2.0",
+
             description=(
-                "Adapter do CIC-IDS2017 para "
-                "flow features e classificação "
-                "binária benigno/ataque."
+                "Adapter CIC-IDS2017 "
+                "para flow features."
             ),
+
             output_representation=(
-                DataRepresentation.FLOW_FEATURES
+                DataRepresentation
+                .FLOW_FEATURES
             ),
+
             tags=(
                 "builtin",
                 "dataset",
                 "flow-features",
                 "cicids2017",
             ),
+
             metadata={
                 "label_column": "Label",
             },
         ),
+
         _create_cicids2017_dataset,
+    )
+
+    registry.register(
+        ComponentSpec(
+            component_id=(
+                ADVERSARIAL_PROTOCOL_ID
+            ),
+
+            kind=(
+                ComponentKind
+                .EXPERIMENT_PROTOCOL
+            ),
+
+            name=(
+                "Adversarial Training Protocol"
+            ),
+
+            version="1.0",
+
+            description=(
+                "Protocolo de treinamento "
+                "adaptativo utilizado pela "
+                "linha 1.x."
+            ),
+
+            tags=(
+                "builtin",
+                "training",
+                "adversarial",
+            ),
+        ),
+
+        _create_adversarial_protocol,
     )
 
     return registry
 
 
-def create_default_registry() -> ComponentRegistry:
-    registry = ComponentRegistry()
-
-    return register_builtin_components(
-        registry
+def create_default_registry() -> (
+    ComponentRegistry
+):
+    return (
+        register_builtin_components(
+            ComponentRegistry()
+        )
     )

@@ -1,6 +1,7 @@
 import pytest
 
 from adarena.builtin import (
+    ADVERSARIAL_PROTOCOL_ID,
     BINARY_MLP_DEFENDER_ID,
     CICIDS2017_DATASET_ID,
     PERTURBATION_ATTACKER_ID,
@@ -88,6 +89,13 @@ def test_registry_builtin_expoe_componentes_atuais():
         )
     )
 
+    protocols = registry.list(
+        kind=(
+            ComponentKind
+            .EXPERIMENT_PROTOCOL
+        )
+    )
+
     assert [
         spec.component_id
         for spec
@@ -112,6 +120,13 @@ def test_registry_builtin_expoe_componentes_atuais():
         CICIDS2017_DATASET_ID
     ]
 
+    assert [
+        spec.component_id
+        for spec
+        in protocols
+    ] == [
+        ADVERSARIAL_PROTOCOL_ID
+    ]
 
 def test_registry_instancia_implementacoes_atuais():
 
@@ -279,5 +294,5 @@ def test_config_serializa_ids_e_parametros():
 
     assert (
         payload["mode"]
-        == "train_and_simulate"
+        == "train"
     )
