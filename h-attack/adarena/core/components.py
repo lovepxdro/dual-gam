@@ -24,6 +24,7 @@ class DataRepresentation(str, Enum):
     RAW_PACKETS = "raw_packets"
     ATTACK_PARAMS = "attack_params"
     BINARY_CLASSIFICATION = "binary_classification"
+    NETWORK_RESULT = "network_result"
 
 
 @dataclass(frozen=True, slots=True)

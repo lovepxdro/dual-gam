@@ -25,12 +25,12 @@ import torch
 
 from adarena.builtin import (
     BINARY_MLP_DEFENDER_ID,
+    CICIDS2017_RENDERER_ID,
     PERTURBATION_ATTACKER_ID,
+    SCAPY_NETWORK_BACKEND_ID,
     create_default_registry,
 )
 from gan.preprocessing import Preprocessador
-from sender.sender import AttackResult, Sender
-from translator.translator import Translator
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +59,8 @@ class AttackController:
         checkpoint_mode: str = "demo",
         attacker_round: Optional[int] = None,
         defender_round: Optional[int] = None,
+        renderer_component_id: Optional[str] = None,
+        network_backend_component_id: Optional[str] = None,
     ):
         self.target_ip = target_ip
         self.target_port = target_port
@@ -85,6 +87,36 @@ class AttackController:
 
         self.registry = create_default_registry()
 
+        self.attacker_component_id = (
+            components_cfg.get(
+                "attacker",
+                PERTURBATION_ATTACKER_ID,
+            )
+        )
+
+        self.defender_component_id = (
+            components_cfg.get(
+                "defender",
+                BINARY_MLP_DEFENDER_ID,
+            )
+        )
+
+        self.renderer_component_id = (
+            renderer_component_id
+            or components_cfg.get(
+                "renderer",
+                CICIDS2017_RENDERER_ID,
+            )
+        )
+
+        self.network_backend_component_id = (
+            network_backend_component_id
+            or components_cfg.get(
+                "network_backend",
+                SCAPY_NETWORK_BACKEND_ID,
+            )
+        )
+
         self.attacker_component_id = components_cfg.get(
             "attacker",
             PERTURBATION_ATTACKER_ID,
@@ -109,8 +141,22 @@ class AttackController:
         self.atacante = self._carregar_atacante(path_atacante)
         self.defensor = self._carregar_defensor(path_defensor)
 
-        self.translator = Translator(self.prep, target_ip, target_port)
-        self.sender = Sender(dry_run=dry_run)
+        self.renderer = self.registry.create(
+            self.renderer_component_id,
+
+            preprocessor=self.prep,
+
+            target_ip=target_ip,
+
+            target_port=target_port,
+        )
+
+
+        self.network_backend = self.registry.create(
+            self.network_backend_component_id,
+
+            dry_run=dry_run,
+        )
 
         self.historico: list[dict] = []
 
@@ -179,9 +225,11 @@ class AttackController:
 
         # 3. Traduzir todas as evasões para que plausibilidade seja medida
         #    separadamente da capacidade de enganar o Defensor.
-        params_traduzidos = self.translator.traduzir_batch(
+        params_traduzidos = self.renderer.render_batch(
             vetores_evasao,
-            evasao_probs=probs_evasao.tolist(),
+
+            scores=probs_evasao.tolist(),
+
             only_valid=False,
         )
 
@@ -227,7 +275,11 @@ class AttackController:
                 len(params_validos),
                 params,
             )
-            result = self.sender.executar(params)
+            result = (
+                self.network_backend.execute(
+                    params
+                )
+            )
             resultados.append(result)
 
             if result.success:

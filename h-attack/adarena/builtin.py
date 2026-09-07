@@ -27,8 +27,20 @@ CICIDS2017_DATASET_ID = (
     "adarena.cicids2017"
 )
 
+SCAPY_NETWORK_BACKEND_ID = (
+    "adarena.scapy_backend"
+)
+
 ADVERSARIAL_PROTOCOL_ID = (
     "adarena.adversarial_training"
+)
+
+CICIDS2017_RENDERER_ID = (
+    "adarena.cicids2017_renderer"
+)
+
+SCAPY_NETWORK_BACKEND_ID = (
+    "adarena.scapy_backend"
 )
 
 
@@ -73,6 +85,45 @@ def _create_cicids2017_dataset(
 
         attack_labels=(
             attack_labels
+        ),
+    )
+
+def _create_cicids2017_renderer(
+    preprocessor,
+    target_ip: str,
+    target_port: int = 80,
+    consistency_tolerance: float = 0.75,
+    **_,
+):
+    from .network.adapters import (
+        TranslatorRenderer,
+    )
+
+    return TranslatorRenderer(
+        preprocessor=preprocessor,
+        target_ip=target_ip,
+        target_port=target_port,
+        consistency_tolerance=(
+            consistency_tolerance
+        ),
+    )
+
+
+def _create_scapy_network_backend(
+    iface=None,
+    dry_run: bool = False,
+    require_private_target: bool = True,
+    **_,
+):
+    from .network.adapters import (
+        SenderNetworkBackend,
+    )
+
+    return SenderNetworkBackend(
+        iface=iface,
+        dry_run=dry_run,
+        require_private_target=(
+            require_private_target
         ),
     )
 
@@ -254,6 +305,94 @@ def register_builtin_components(
         ),
 
         _create_adversarial_protocol,
+    )
+
+    registry.register(
+        ComponentSpec(
+            component_id=(
+                CICIDS2017_RENDERER_ID
+            ),
+
+            kind=(
+                ComponentKind.RENDERER
+            ),
+
+            name=(
+                "CIC-IDS2017 Flow Renderer"
+            ),
+
+            version="2.0",
+
+            description=(
+                "Converte flow features produzidas "
+                "pelos modelos atuais em parâmetros "
+                "materializáveis pelo backend de rede."
+            ),
+
+            input_representation=(
+                DataRepresentation
+                .FLOW_FEATURES
+            ),
+
+            output_representation=(
+                DataRepresentation
+                .ATTACK_PARAMS
+            ),
+
+            tags=(
+                "builtin",
+                "renderer",
+                "flow-features",
+                "cicids2017",
+                "legacy-translator",
+            ),
+        ),
+
+        _create_cicids2017_renderer,
+    )
+
+
+    registry.register(
+        ComponentSpec(
+            component_id=(
+                SCAPY_NETWORK_BACKEND_ID
+            ),
+
+            kind=(
+                ComponentKind
+                .NETWORK_BACKEND
+            ),
+
+            name=(
+                "Scapy Network Backend"
+            ),
+
+            version="2.0",
+
+            description=(
+                "Backend de execução utilizado "
+                "no ambiente experimental isolado."
+            ),
+
+            input_representation=(
+                DataRepresentation
+                .ATTACK_PARAMS
+            ),
+
+            output_representation=(
+                DataRepresentation
+                .NETWORK_RESULT
+            ),
+
+            tags=(
+                "builtin",
+                "network",
+                "scapy",
+                "laboratory",
+            ),
+        ),
+
+        _create_scapy_network_backend,
     )
 
     return registry

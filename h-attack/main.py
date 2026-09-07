@@ -15,7 +15,9 @@ from adarena.builtin import (
     ADVERSARIAL_PROTOCOL_ID,
     BINARY_MLP_DEFENDER_ID,
     CICIDS2017_DATASET_ID,
+    CICIDS2017_RENDERER_ID,
     PERTURBATION_ATTACKER_ID,
+    SCAPY_NETWORK_BACKEND_ID,
     create_default_registry,
 )
 
@@ -236,6 +238,14 @@ def cmd_attack(
         defender_round=(
             args.defender_round
         ),
+
+        renderer_component_id=(
+            args.renderer
+        ),
+
+        network_backend_component_id=(
+            args.network_backend
+        ),
     )
 
     controller.executar_loop(
@@ -353,6 +363,28 @@ def main() -> None:
             kind=(
                 ComponentKind
                 .EXPERIMENT_PROTOCOL
+            )
+        )
+    ]
+
+    renderers = [
+        spec.component_id
+        for spec
+        in registry.list(
+            kind=(
+                ComponentKind.RENDERER
+            )
+        )
+    ]
+
+
+    network_backends = [
+        spec.component_id
+        for spec
+        in registry.list(
+            kind=(
+                ComponentKind
+                .NETWORK_BACKEND
             )
         )
     ]
@@ -477,6 +509,27 @@ def main() -> None:
         default=100,
     )
 
+    attack.add_argument(
+        "--renderer",
+
+        default=(
+            CICIDS2017_RENDERER_ID
+        ),
+
+        choices=renderers,
+    )
+
+
+    attack.add_argument(
+        "--network-backend",
+
+        default=(
+            SCAPY_NETWORK_BACKEND_ID
+        ),
+
+        choices=network_backends,
+    )
+
     adicionar_argumentos_checkpoint(
         attack
     )
@@ -514,6 +567,27 @@ def main() -> None:
         "--n-vetores",
         type=int,
         default=20,
+    )
+
+    dry.add_argument(
+        "--renderer",
+
+        default=(
+            CICIDS2017_RENDERER_ID
+        ),
+
+        choices=renderers,
+    )
+
+
+    dry.add_argument(
+        "--network-backend",
+
+        default=(
+            SCAPY_NETWORK_BACKEND_ID
+        ),
+
+        choices=network_backends,
     )
 
     adicionar_argumentos_checkpoint(

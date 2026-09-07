@@ -25,23 +25,45 @@ def _params(valid: bool) -> AttackParams:
     )
 
 
-class FakeTranslator:
-    def __init__(self, outputs):
+class FakeRenderer:
+
+    def __init__(
+        self,
+        outputs,
+    ):
         self.outputs = outputs
         self.calls = 0
 
-    def traduzir_batch(self, vetores, evasao_probs=None, only_valid=False):
+    def render_batch(
+        self,
+        samples,
+        *,
+        scores=None,
+        only_valid=False,
+    ):
         self.calls += 1
-        assert only_valid is False
+
+        assert (
+            only_valid
+            is False
+        )
+
         return self.outputs
 
 
-class FakeSender:
+class FakeNetworkBackend:
+
     def __init__(self):
         self.params = []
 
-    def executar(self, params):
-        self.params.append(params)
+    def execute(
+        self,
+        params,
+    ):
+        self.params.append(
+            params
+        )
+
         return AttackResult(
             params=params,
             packets_sent=100,
@@ -60,8 +82,13 @@ def _controller(tmp_path, probs, translated):
     controller.dry_run = True
     controller.models_dir = tmp_path
     controller.historico = []
-    controller.translator = FakeTranslator(translated)
-    controller.sender = FakeSender()
+    controller.renderer = FakeRenderer(
+        translated
+    )
+
+    controller.network_backend = (
+        FakeNetworkBackend()
+    )
 
     vetores = np.arange(len(probs) * 3, dtype=float).reshape(len(probs), 3)
     controller._gerar_e_avaliar = lambda n: (
@@ -81,8 +108,8 @@ def test_controller_envia_apenas_traducoes_validas(tmp_path):
     results = controller.executar_ciclo(n_vetores=3)
 
     assert len(results) == 1
-    assert len(controller.sender.params) == 1
-    assert controller.sender.params[0].translation_valid is True
+    assert len(controller.network_backend.params) == 1
+    assert controller.network_backend.params[0].translation_valid is True
 
     entry = controller.historico[-1]
     assert entry["n_vetores_gerados"] == 3
@@ -105,7 +132,7 @@ def test_controller_zero_plausiveis_nao_chama_sender(tmp_path):
     results = controller.executar_ciclo(n_vetores=2)
 
     assert results == []
-    assert controller.sender.params == []
+    assert controller.network_backend.params == []
     entry = controller.historico[-1]
     assert entry["n_evasoes"] == 2
     assert entry["n_traducoes_validas"] == 0
@@ -124,8 +151,8 @@ def test_controller_zero_evasoes_registra_ciclo_sem_translator(tmp_path):
     results = controller.executar_ciclo(n_vetores=2)
 
     assert results == []
-    assert controller.translator.calls == 0
-    assert controller.sender.params == []
+    assert controller.renderer.calls == 0
+    assert controller.network_backend.params == []
     entry = controller.historico[-1]
     assert entry["n_evasoes"] == 0
     assert entry["n_traducoes_validas"] == 0

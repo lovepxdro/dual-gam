@@ -4,7 +4,9 @@ from adarena.builtin import (
     ADVERSARIAL_PROTOCOL_ID,
     BINARY_MLP_DEFENDER_ID,
     CICIDS2017_DATASET_ID,
+    CICIDS2017_RENDERER_ID,
     PERTURBATION_ATTACKER_ID,
+    SCAPY_NETWORK_BACKEND_ID,
     create_default_registry,
 )
 
@@ -96,6 +98,19 @@ def test_registry_builtin_expoe_componentes_atuais():
         )
     )
 
+    renderers = registry.list(
+        kind=(
+            ComponentKind.RENDERER
+        )
+    )
+
+    network_backends = registry.list(
+        kind=(
+            ComponentKind
+            .NETWORK_BACKEND
+        )
+    )
+
     assert [
         spec.component_id
         for spec
@@ -126,6 +141,23 @@ def test_registry_builtin_expoe_componentes_atuais():
         in protocols
     ] == [
         ADVERSARIAL_PROTOCOL_ID
+    ]
+
+    assert [
+        spec.component_id
+        for spec
+        in renderers
+    ] == [
+        CICIDS2017_RENDERER_ID
+    ]
+
+
+    assert [
+        spec.component_id
+        for spec
+        in network_backends
+    ] == [
+        SCAPY_NETWORK_BACKEND_ID
     ]
 
 def test_registry_instancia_implementacoes_atuais():
