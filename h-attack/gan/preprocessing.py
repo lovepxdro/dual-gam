@@ -1,8 +1,9 @@
 """
 Dual-GAM — Pré-processamento de dados
 
-Carrega o CIC-IDS2017, realiza auditoria do dataset, remove duplicatas exatas,
-divide os dados em train/validation/test e normaliza os conjuntos.
+Recebe dados já carregados por um DatasetAdapter, realiza auditoria,
+remove duplicatas exatas, divide em train/validation/test e normaliza
+os conjuntos.
 
 Regras metodológicas:
 - nenhuma estatística do conjunto de validação/teste participa do fit do scaler;
@@ -57,54 +58,97 @@ FEATURE_MAP = {
 
 
 class Preprocessador:
-    """Carrega, audita, separa e normaliza o dataset CIC-IDS2017."""
+    """
+    Audita, separa e normaliza dados já carregados
+    por um DatasetAdapter.
+    """
 
-    def __init__(self):
+    def __init__(
+        self,
+        feature_names: (
+            list[str]
+            | tuple[str, ...]
+            | None
+        ) = None,
+    ):
         self.scaler = StandardScaler()
         self.label_encoder = LabelEncoder()
-        self.feature_names: list[str] = []
-        self.audit_info: dict[str, object] = {}
+
+        self.feature_names: list[str] = list(
+            feature_names or []
+        )
+
+        self.audit_info: dict[
+            str,
+            object,
+        ] = {}
+
+    def configurar_dataset(
+        self,
+        dataset,
+    ) -> None:
+        """
+        Adota o schema de um DatasetData.
+
+        O preprocessador não precisa saber se os dados
+        vieram do CIC-IDS2017 ou de outro adapter.
+        """
+
+        self.feature_names = list(
+            dataset.schema.feature_names
+        )
+
+        ordered_labels = [
+            name
+            for name, _
+            in sorted(
+                dataset
+                .schema
+                .label_mapping
+                .items(),
+                key=lambda item: item[1],
+            )
+        ]
+
+        # Mantido porque os artefatos da v1.x
+        # persistem um LabelEncoder.
+        self.label_encoder.classes_ = (
+            np.asarray(
+                ordered_labels,
+                dtype=object,
+            )
+        )
 
     def carregar_parquet(
         self,
         path: str | Path,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """Carrega e limpa o .parquet sem normalizar os dados."""
-        logger.info("  Carregando dataset: %s", path)
+    ) -> tuple[
+        np.ndarray,
+        np.ndarray,
+    ]:
+        """
+        Compatibilidade temporária com a API v1.x.
 
-        df = pd.read_parquet(path)
-        if "Label" not in df.columns:
-            raise ValueError("Dataset sem coluna obrigatória 'Label'")
+        Código novo deve carregar datasets através
+        do ComponentRegistry.
+        """
 
-        logger.info(
-            "  Shape: %s | Classes: %s",
-            df.shape,
-            df["Label"].value_counts().to_dict(),
+        from adarena.datasets.cicids2017 import (
+            CICIDS2017Dataset,
         )
 
-        X = df.drop(columns=["Label"]).copy()
-        y = df["Label"].copy()
+        dataset = (
+            CICIDS2017Dataset()
+            .load(path)
+        )
 
-        # Garante que todo o espaço de features seja numérico e finito.
-        X = X.apply(pd.to_numeric, errors="coerce")
-        X = X.replace([np.inf, -np.inf], np.nan).fillna(0.0)
-
-        self.feature_names = X.columns.astype(str).tolist()
-        y_encoded = self.label_encoder.fit_transform(y)
-
-        logger.info(
-            "  Classes mapeadas: %s",
-            dict(
-                zip(
-                    self.label_encoder.classes_,
-                    range(len(self.label_encoder.classes_)),
-                )
-            ),
+        self.configurar_dataset(
+            dataset
         )
 
         return (
-            X.to_numpy(dtype=np.float32),
-            y_encoded.astype(np.float32),
+            dataset.X,
+            dataset.y,
         )
 
     def _dataframe_com_label(

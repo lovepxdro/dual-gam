@@ -23,7 +23,11 @@ from typing import Optional
 import numpy as np
 import torch
 
-from gan.models import Atacante, Defensor
+from adarena.builtin import (
+    BINARY_MLP_DEFENDER_ID,
+    PERTURBATION_ATTACKER_ID,
+    create_default_registry,
+)
 from gan.preprocessing import Preprocessador
 from sender.sender import AttackResult, Sender
 from translator.translator import Translator
@@ -73,6 +77,23 @@ class AttackController:
         self.experiment_config = self._carregar_config_execucao()
         treino_cfg = self.experiment_config.get("treinamento", {})
         dados_cfg = self.experiment_config.get("dados", {})
+
+        components_cfg = self.experiment_config.get(
+            "components",
+            {},
+        )
+
+        self.registry = create_default_registry()
+
+        self.attacker_component_id = components_cfg.get(
+            "attacker",
+            PERTURBATION_ATTACKER_ID,
+        )
+
+        self.defender_component_id = components_cfg.get(
+            "defender",
+            BINARY_MLP_DEFENDER_ID,
+        )
 
         self.epsilon = float(treino_cfg.get("epsilon", 0.3))
         self.classification_threshold = float(
@@ -318,7 +339,7 @@ class AttackController:
         probs = probs_t.cpu().numpy()
 
         return vetores, probs
-        
+
     def _escolher_checkpoint_demonstracao(self) -> tuple[int, int]:
         """
         Seleciona o cenário de maior evasão registrada no treinamento.
@@ -426,8 +447,12 @@ class AttackController:
             f"Modo de checkpoint inválido: {self.checkpoint_mode}"
         )
 
-    def _carregar_atacante(self, path: Path) -> Atacante:
-        model = Atacante(
+    def _carregar_atacante(
+        self,
+        path: Path,
+    ):
+        model = self.registry.create(
+            self.attacker_component_id,
             noise_dim=self.noise_dim,
             output_dim=self.input_dim,
         ).to(self.device)
@@ -451,9 +476,13 @@ class AttackController:
 
         return model
 
-    def _carregar_defensor(self, path: Path) -> Defensor:
-        model = Defensor(
-            input_dim=self.input_dim
+    def _carregar_defensor(
+        self,
+        path: Path,
+    ):
+        model = self.registry.create(
+            self.defender_component_id,
+            input_dim=self.input_dim,
         ).to(self.device)
 
         if not path.exists():

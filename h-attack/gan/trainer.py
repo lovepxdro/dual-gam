@@ -28,7 +28,12 @@ from sklearn.metrics import (
 )
 from torch.utils.data import DataLoader, TensorDataset
 
-from .models import Atacante, Defensor
+from adarena.builtin import (
+    BINARY_MLP_DEFENDER_ID,
+    PERTURBATION_ATTACKER_ID,
+    create_default_registry,
+)
+from adarena.core.registry import ComponentRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -103,14 +108,40 @@ class TrainingConfig:
 class AdversarialTrainer:
     """Orquestra o ciclo co-evolutivo Atacante ↔ Defensor."""
 
-    def __init__(self, config: TrainingConfig):
+    def __init__(
+        self,
+        config: TrainingConfig,
+        registry: ComponentRegistry | None = None,
+        attacker_component_id: str = PERTURBATION_ATTACKER_ID,
+        defender_component_id: str = BINARY_MLP_DEFENDER_ID,
+    ):
         self.cfg = config
-        self.device = torch.device(config.device)
+        self.device = torch.device(
+            config.device
+        )
 
-        self.defensor = Defensor(config.input_dim).to(self.device)
-        self.atacante = Atacante(
-            config.noise_dim,
-            config.input_dim,
+        self.registry = (
+            registry
+            or create_default_registry()
+        )
+
+        self.attacker_component_id = (
+            attacker_component_id
+        )
+
+        self.defender_component_id = (
+            defender_component_id
+        )
+
+        self.defensor = self.registry.create(
+            defender_component_id,
+            input_dim=config.input_dim,
+        ).to(self.device)
+
+        self.atacante = self.registry.create(
+            attacker_component_id,
+            noise_dim=config.noise_dim,
+            output_dim=config.input_dim,
         ).to(self.device)
 
         self.criterio = nn.BCELoss()
