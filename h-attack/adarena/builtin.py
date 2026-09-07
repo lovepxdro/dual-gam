@@ -43,6 +43,14 @@ SCAPY_NETWORK_BACKEND_ID = (
     "adarena.scapy_backend"
 )
 
+SCAPY_CAPTURE_ID = (
+    "adarena.scapy_capture"
+)
+
+BASIC_FLOW_EXTRACTOR_ID = (
+    "adarena.basic_flow_extractor"
+)
+
 
 def _create_perturbation_attacker(
     noise_dim: int = 32,
@@ -395,7 +403,112 @@ def register_builtin_components(
         _create_scapy_network_backend,
     )
 
+    registry.register(
+        ComponentSpec(
+            component_id=(
+                SCAPY_CAPTURE_ID
+            ),
+
+            kind=(
+                ComponentKind.CAPTURE
+            ),
+
+            name=(
+                "Scapy Packet Capture"
+            ),
+
+            version="2.0",
+
+            description=(
+                "Captura passiva de pacotes "
+                "no ambiente experimental."
+            ),
+
+            output_representation=(
+                DataRepresentation
+                .PACKET_RECORDS
+            ),
+
+            tags=(
+                "builtin",
+                "capture",
+                "scapy",
+                "laboratory",
+            ),
+        ),
+
+        _create_scapy_capture,
+    )
+
+
+    registry.register(
+        ComponentSpec(
+            component_id=(
+                BASIC_FLOW_EXTRACTOR_ID
+            ),
+
+            kind=(
+                ComponentKind.EXTRACTOR
+            ),
+
+            name=(
+                "Basic Flow Extractor"
+            ),
+
+            version="2.0",
+
+            description=(
+                "Reconstrói estatísticas "
+                "auditáveis de fluxo a partir "
+                "de pacotes capturados."
+            ),
+
+            input_representation=(
+                DataRepresentation
+                .PACKET_RECORDS
+            ),
+
+            output_representation=(
+                DataRepresentation
+                .FLOW_FEATURES
+            ),
+
+            tags=(
+                "builtin",
+                "extractor",
+                "flow-features",
+            ),
+        ),
+
+        _create_basic_flow_extractor,
+    )
+
     return registry
+
+
+def _create_scapy_capture(
+    iface=None,
+    bpf_filter=None,
+    **_,
+):
+    from .network.capture import (
+        ScapyPacketCapture,
+    )
+
+    return ScapyPacketCapture(
+        iface=iface,
+        bpf_filter=bpf_filter,
+    )
+
+
+def _create_basic_flow_extractor(
+    **_,
+):
+    from .network.extractor import (
+        BasicFlowExtractor,
+    )
+
+    return BasicFlowExtractor()
 
 
 def create_default_registry() -> (

@@ -1,20 +1,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Sequence
+
+import numpy as np
 
 
 class Renderer(ABC):
-    """
-    Converte a representação produzida por um modelo
-    em uma representação materializável pelo ambiente.
-
-    Exemplo atual:
-
-        FLOW_FEATURES -> ATTACK_PARAMS
-
-    O Core não precisa conhecer AttackParams.
-    """
 
     @abstractmethod
     def render(
@@ -37,14 +30,6 @@ class Renderer(ABC):
 
 
 class NetworkBackend(ABC):
-    """
-    Materializa uma representação no ambiente de rede.
-
-    O Backend é responsável pela execução e pelas métricas
-    observadas no lado emissor.
-
-    Captura de tráfego não pertence a este contrato.
-    """
 
     @abstractmethod
     def execute(
@@ -61,3 +46,150 @@ class NetworkBackend(ABC):
             self.execute(payload)
             for payload in payloads
         ]
+
+
+@dataclass(frozen=True, slots=True)
+class CapturedPacket:
+    """
+    Representação mínima e independente de biblioteca
+    de um pacote observado no ambiente experimental.
+    """
+
+    timestamp: float
+
+    src_ip: str
+    dst_ip: str
+
+    src_port: int | None
+    dst_port: int | None
+
+    protocol: str
+
+    length: int
+
+    tcp_flags: str = ""
+
+    payload_length: int = 0
+
+    metadata: dict[str, Any] = field(
+        default_factory=dict
+    )
+
+
+@dataclass(slots=True)
+class CaptureBatch:
+    packets: list[CapturedPacket]
+
+    started_at: float
+    ended_at: float
+
+    interface: str | None = None
+
+    metadata: dict[str, Any] = field(
+        default_factory=dict
+    )
+
+    @property
+    def duration(self) -> float:
+        return max(
+            0.0,
+            self.ended_at
+            - self.started_at,
+        )
+
+    def __len__(self) -> int:
+        return len(
+            self.packets
+        )
+
+
+@dataclass(slots=True)
+class FlowFeatureBatch:
+    """
+    Resultado de um FlowExtractor.
+
+    X segue exatamente a ordem de feature_names.
+
+    Features não reconstruíveis podem ser representadas
+    por NaN quando strict=False. Nesse caso o batch não
+    está pronto para ser enviado ao modelo.
+    """
+
+    X: np.ndarray
+
+    feature_names: tuple[str, ...]
+
+    flow_ids: tuple[str, ...]
+
+    unsupported_features: tuple[
+        str,
+        ...
+    ] = ()
+
+    metadata: dict[str, Any] = field(
+        default_factory=dict
+    )
+
+    def __post_init__(self) -> None:
+        self.X = np.asarray(
+            self.X,
+            dtype=np.float32,
+        )
+
+        if self.X.ndim != 2:
+            raise ValueError(
+                "X deve possuir shape "
+                "[N, features]"
+            )
+
+        if (
+            self.X.shape[1]
+            != len(self.feature_names)
+        ):
+            raise ValueError(
+                "Quantidade de colunas "
+                "incompatível com feature_names"
+            )
+
+        if (
+            self.X.shape[0]
+            != len(self.flow_ids)
+        ):
+            raise ValueError(
+                "Quantidade de fluxos "
+                "incompatível com flow_ids"
+            )
+
+    @property
+    def ready_for_model(self) -> bool:
+        return bool(
+            not self.unsupported_features
+            and np.isfinite(
+                self.X
+            ).all()
+        )
+
+
+class Capture(ABC):
+
+    @abstractmethod
+    def capture(
+        self,
+        *,
+        duration: float,
+        packet_limit: int | None = None,
+    ) -> CaptureBatch:
+        raise NotImplementedError
+
+
+class FlowExtractor(ABC):
+
+    @abstractmethod
+    def extract(
+        self,
+        capture: CaptureBatch,
+        *,
+        feature_names: Sequence[str],
+        strict: bool = True,
+    ) -> FlowFeatureBatch:
+        raise NotImplementedError

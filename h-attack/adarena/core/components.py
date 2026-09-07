@@ -14,16 +14,25 @@ class ComponentKind(str, Enum):
     EXPERIMENT_PROTOCOL = "experiment_protocol"
 
     RENDERER = "renderer"
-    EXTRACTOR = "extractor"
     NETWORK_BACKEND = "network_backend"
+
+    CAPTURE = "capture"
+    EXTRACTOR = "extractor"
 
 
 class DataRepresentation(str, Enum):
     FLOW_FEATURES = "flow_features"
+
     PACKET_SEQUENCE = "packet_sequence"
+    PACKET_RECORDS = "packet_records"
     RAW_PACKETS = "raw_packets"
+
     ATTACK_PARAMS = "attack_params"
-    BINARY_CLASSIFICATION = "binary_classification"
+
+    BINARY_CLASSIFICATION = (
+        "binary_classification"
+    )
+
     NETWORK_RESULT = "network_result"
 
 
