@@ -593,12 +593,15 @@ class AdversarialTrainer:
             for path in defender_paths
         ]
 
-        atacante_eval = Atacante(
-            self.cfg.noise_dim,
-            self.cfg.input_dim,
+        atacante_eval = self.registry.create(
+            self.attacker_component_id,
+            noise_dim=self.cfg.noise_dim,
+            input_dim=self.cfg.input_dim,
         ).to(self.device)
-        defensor_eval = Defensor(
-            self.cfg.input_dim
+
+        defensor_eval = self.registry.create(
+            self.defender_component_id,
+            input_dim=self.cfg.input_dim,
         ).to(self.device)
 
         atacante_eval.eval()

@@ -99,14 +99,27 @@ def gerar_graficos(historico: dict, plots_dir: Path) -> list[Path]:
     paths: list[Path] = []
 
     fig, ax = plt.subplots(figsize=(9, 5))
-    ax.plot(rodadas, np.array(historico["taxa_evasao_pre_adaptacao"]) * 100, marker="o", label="Pré-adaptação")
-    ax.plot(rodadas, np.array(historico["taxa_evasao_pos_adaptacao"]) * 100, marker="o", label="Pós-adaptação")
+    ax.plot(
+        rodadas,
+        np.array(historico["taxa_evasao_pre_adaptacao"]) * 100,
+        marker="o",
+        label="Pré-adaptação",
+    )
+    ax.plot(
+        rodadas,
+        np.array(historico["taxa_evasao_pos_adaptacao"]) * 100,
+        marker="o",
+        label="Pós-adaptação",
+    )
     ax.set_xlabel("Rodada")
     ax.set_ylabel("Taxa de evasão (%)")
     ax.set_title("Evasão adversarial pré e pós-adaptação")
+    ax.set_xticks(rodadas)
     ax.legend()
     ax.grid(True, alpha=0.25)
-    p = plots_dir / "evasao_pre_pos.png"; _save(fig, p); paths.append(p)
+    p = plots_dir / "evasao_pre_pos.png"
+    _save(fig, p)
+    paths.append(p)
 
     fig, ax = plt.subplots(figsize=(9, 5))
     for key, label in [
@@ -115,44 +128,96 @@ def gerar_graficos(historico: dict, plots_dir: Path) -> list[Path]:
         ("recall_defensor_validacao", "Recall"),
         ("f1_defensor_validacao", "F1"),
     ]:
-        ax.plot(rodadas, np.array(historico[key]) * 100, label=label)
+        ax.plot(
+            rodadas,
+            np.array(historico[key]) * 100,
+            marker="o",
+            label=label,
+        )
     ax.set_xlabel("Rodada")
     ax.set_ylabel("Métrica (%)")
     ax.set_title("Desempenho convencional do Defensor")
+    ax.set_xticks(rodadas)
     ax.legend()
     ax.grid(True, alpha=0.25)
-    p = plots_dir / "metricas_defensor.png"; _save(fig, p); paths.append(p)
+    p = plots_dir / "metricas_defensor.png"
+    _save(fig, p)
+    paths.append(p)
 
     fig, ax = plt.subplots(figsize=(9, 5))
-    ax.plot(rodadas, np.array(historico["fpr_defensor_validacao"]) * 100, label="FPR")
-    ax.plot(rodadas, np.array(historico["fnr_defensor_validacao"]) * 100, label="FNR")
+    ax.plot(
+        rodadas,
+        np.array(historico["fpr_defensor_validacao"]) * 100,
+        marker="o",
+        label="FPR",
+    )
+    ax.plot(
+        rodadas,
+        np.array(historico["fnr_defensor_validacao"]) * 100,
+        marker="o",
+        label="FNR",
+    )
     ax.set_xlabel("Rodada")
     ax.set_ylabel("Taxa (%)")
     ax.set_title("Falsos positivos e falsos negativos")
+    ax.set_xticks(rodadas)
     ax.legend()
     ax.grid(True, alpha=0.25)
-    p = plots_dir / "fpr_fnr.png"; _save(fig, p); paths.append(p)
+    p = plots_dir / "fpr_fnr.png"
+    _save(fig, p)
+    paths.append(p)
 
     fig, ax = plt.subplots(figsize=(9, 5))
-    ax.plot(rodadas, historico["loss_atacante"], label="Atacante")
-    ax.plot(rodadas, historico["loss_defensor"], label="Defensor")
+    ax.plot(
+        rodadas,
+        historico["loss_atacante"],
+        marker="o",
+        label="Atacante",
+    )
+    ax.plot(
+        rodadas,
+        historico["loss_defensor"],
+        marker="o",
+        label="Defensor",
+    )
     ax.set_xlabel("Rodada")
     ax.set_ylabel("Loss")
     ax.set_title("Loss por rodada")
+    ax.set_xticks(rodadas)
     ax.legend()
     ax.grid(True, alpha=0.25)
-    p = plots_dir / "losses.png"; _save(fig, p); paths.append(p)
+    p = plots_dir / "losses.png"
+    _save(fig, p)
+    paths.append(p)
 
     fig, ax = plt.subplots(figsize=(9, 5))
-    ax.plot(rodadas, historico["perturbacao_l1_media"], label="L1")
-    ax.plot(rodadas, historico["perturbacao_l2_media"], label="L2")
-    ax.plot(rodadas, historico["perturbacao_linf_media"], label="L∞")
+    ax.plot(
+        rodadas,
+        historico["perturbacao_l1_media"],
+        marker="o",
+        label="L1",
+    )
+    ax.plot(
+        rodadas,
+        historico["perturbacao_l2_media"],
+        marker="o",
+        label="L2",
+    )
+    ax.plot(
+        rodadas,
+        historico["perturbacao_linf_media"],
+        marker="o",
+        label="L∞",
+    )
     ax.set_xlabel("Rodada")
     ax.set_ylabel("Norma média")
     ax.set_title("Magnitude das perturbações")
+    ax.set_xticks(rodadas)
     ax.legend()
     ax.grid(True, alpha=0.25)
-    p = plots_dir / "perturbacoes.png"; _save(fig, p); paths.append(p)
+    p = plots_dir / "perturbacoes.png"
+    _save(fig, p)
+    paths.append(p)
 
     cruzada = historico["avaliacao_cruzada_checkpoints"]
     matriz = np.array(cruzada["matriz_evasao"]) * 100
@@ -162,10 +227,27 @@ def gerar_graficos(historico: dict, plots_dir: Path) -> list[Path]:
     ax.set_ylabel("Atacante")
     ax.set_title("Matriz de evasão Aᵢ × Dⱼ (%)")
     ax.set_xticks(np.arange(len(cruzada["colunas_defensores"])))
-    ax.set_xticklabels([f"D{x}" for x in cruzada["colunas_defensores"]], rotation=90)
+    ax.set_xticklabels(
+        [f"D{x}" for x in cruzada["colunas_defensores"]],
+        rotation=90,
+    )
     ax.set_yticks(np.arange(len(cruzada["linhas_atacantes"])))
     ax.set_yticklabels([f"A{x}" for x in cruzada["linhas_atacantes"]])
+
+    for i in range(matriz.shape[0]):
+        for j in range(matriz.shape[1]):
+            ax.text(
+                j,
+                i,
+                f"{matriz[i, j]:.1f}",
+                ha="center",
+                va="center",
+                color="white" if matriz[i, j] > 50 else "black",
+            )
+
     fig.colorbar(image, ax=ax, label="Evasão (%)")
-    p = plots_dir / "matriz_checkpoints_heatmap.png"; _save(fig, p); paths.append(p)
+    p = plots_dir / "matriz_checkpoints_heatmap.png"
+    _save(fig, p)
+    paths.append(p)
 
     return paths
