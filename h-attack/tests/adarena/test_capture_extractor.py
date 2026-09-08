@@ -324,3 +324,63 @@ def test_extractor_nao_inventa_feature_desconhecida():
             1,
         ]
     )
+
+def test_extractor_reporta_cobertura_de_features():
+
+    extractor = (
+        BasicFlowExtractor()
+    )
+
+    report = extractor.support(
+        [
+            "Flow Duration",
+            "Flow Packets/s",
+            "SYN Flag Count",
+            "Init_Win_bytes_forward",
+            "Feature Impossivel",
+        ]
+    )
+
+    assert (
+        report.total
+        == 5
+    )
+
+    assert (
+        report.supported_count
+        == 3
+    )
+
+    assert (
+        report.unsupported_count
+        == 2
+    )
+
+    assert (
+        report.supported_features
+        == (
+            "Flow Duration",
+            "Flow Packets/s",
+            "SYN Flag Count",
+        )
+    )
+
+    assert (
+        report.unsupported_features
+        == (
+            "Init_Win_bytes_forward",
+            "Feature Impossivel",
+        )
+    )
+
+    assert (
+        report.coverage
+        == pytest.approx(
+            3 / 5
+        )
+    )
+
+    assert (
+        report.complete
+        is False
+    )

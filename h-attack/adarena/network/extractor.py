@@ -8,6 +8,7 @@ import numpy as np
 from .base import (
     CaptureBatch,
     CapturedPacket,
+    FeatureSupportReport,
     FlowExtractor,
     FlowFeatureBatch,
 )
@@ -234,6 +235,46 @@ class BasicFlowExtractor(
             packet.protocol,
         )
 
+    def support(
+        self,
+        feature_names: Sequence[str],
+    ) -> FeatureSupportReport:
+
+        requested = tuple(
+            str(feature)
+            for feature in feature_names
+        )
+
+        supported = []
+        unsupported = []
+
+        for feature in requested:
+            if (
+                self._canonical_feature(
+                    feature
+                )
+                is None
+            ):
+                unsupported.append(
+                    feature
+                )
+            else:
+                supported.append(
+                    feature
+                )
+
+        return FeatureSupportReport(
+            requested_features=requested,
+
+            supported_features=tuple(
+                supported
+            ),
+
+            unsupported_features=tuple(
+                unsupported
+            ),
+        )
+
     def extract(
         self,
         capture: CaptureBatch,
@@ -247,26 +288,21 @@ class BasicFlowExtractor(
             for name in feature_names
         )
 
-        canonical = []
+        support = self.support(
+            feature_names
+        )
 
-        unsupported = []
+        unsupported = list(
+            support.unsupported_features
+        )
 
-        for feature in feature_names:
-            resolved = (
-                self._canonical_feature(
-                    feature
-                )
+        canonical = [
+            self._canonical_feature(
+                feature
             )
-
-            canonical.append(
-                resolved
-            )
-
-            if resolved is None:
-                unsupported.append(
-                    feature
-                )
-
+            for feature
+            in feature_names
+        ]
         if (
             strict
             and unsupported

@@ -182,7 +182,56 @@ class Capture(ABC):
         raise NotImplementedError
 
 
+@dataclass(frozen=True, slots=True)
+class FeatureSupportReport:
+    requested_features: tuple[str, ...]
+    supported_features: tuple[str, ...]
+    unsupported_features: tuple[str, ...]
+
+    @property
+    def total(self) -> int:
+        return len(
+            self.requested_features
+        )
+
+    @property
+    def supported_count(self) -> int:
+        return len(
+            self.supported_features
+        )
+
+    @property
+    def unsupported_count(self) -> int:
+        return len(
+            self.unsupported_features
+        )
+
+    @property
+    def coverage(self) -> float:
+        if self.total == 0:
+            return 1.0
+
+        return (
+            self.supported_count
+            / self.total
+        )
+
+    @property
+    def complete(self) -> bool:
+        return (
+            self.unsupported_count
+            == 0
+        )
+
+
 class FlowExtractor(ABC):
+
+    @abstractmethod
+    def support(
+        self,
+        feature_names: Sequence[str],
+    ) -> FeatureSupportReport:
+        raise NotImplementedError
 
     @abstractmethod
     def extract(

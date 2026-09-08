@@ -421,6 +421,79 @@ class Preprocessador:
 
         return obj
 
+    def normalizar(
+        self,
+        X: np.ndarray,
+    ) -> np.ndarray:
+        """
+        Normaliza novas amostras utilizando exclusivamente
+        o scaler ajustado durante o treinamento.
+
+        Usado, por exemplo, para converter flow features
+        reconstruídas da rede para o espaço esperado pelo
+        Defensor.
+        """
+
+        X = np.asarray(
+            X,
+            dtype=np.float64,
+        )
+
+        if X.ndim != 2:
+            raise ValueError(
+                "X deve possuir shape [N, features]"
+            )
+
+        if not hasattr(
+            self.scaler,
+            "mean_",
+        ):
+            raise RuntimeError(
+                "Scaler ainda não foi ajustado"
+            )
+
+        expected_features = len(
+            self.scaler.mean_
+        )
+
+        if (
+            X.shape[1]
+            != expected_features
+        ):
+            raise ValueError(
+                "Número de features incompatível "
+                "com o scaler: "
+                f"{X.shape[1]} != "
+                f"{expected_features}"
+            )
+
+        if (
+            self.feature_names
+            and X.shape[1]
+            != len(self.feature_names)
+        ):
+            raise ValueError(
+                "Número de features incompatível "
+                "com feature_names: "
+                f"{X.shape[1]} != "
+                f"{len(self.feature_names)}"
+            )
+
+        if not np.isfinite(
+            X
+        ).all():
+            raise ValueError(
+                "X contém valores não finitos"
+            )
+
+        return (
+            self.scaler
+            .transform(X)
+            .astype(
+                np.float32
+            )
+        )
+
     def desnormalizar(
         self,
         X_scaled: np.ndarray,
