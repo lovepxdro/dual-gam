@@ -549,3 +549,177 @@ def test_extractor_reconstroi_headers_e_janelas_tcp():
     assert vector[4] == pytest.approx(
         20.0
     )
+
+def test_extractor_reconstroi_subflows_active_idle():
+
+    extractor = (
+        BasicFlowExtractor()
+    )
+
+    packets = [
+        CapturedPacket(
+            timestamp=0.0,
+
+            src_ip="172.20.0.2",
+            dst_ip="172.20.0.10",
+
+            src_port=50000,
+            dst_port=80,
+
+            protocol="TCP",
+
+            length=100,
+            payload_length=100,
+
+            header_length=20,
+            tcp_window=4096,
+        ),
+
+        CapturedPacket(
+            timestamp=1.0,
+
+            src_ip="172.20.0.10",
+            dst_ip="172.20.0.2",
+
+            src_port=80,
+            dst_port=50000,
+
+            protocol="TCP",
+
+            length=60,
+            payload_length=60,
+
+            header_length=20,
+            tcp_window=8192,
+        ),
+
+        # gap > 5 s:
+        # cria idle e novo período ativo.
+        CapturedPacket(
+            timestamp=7.0,
+
+            src_ip="172.20.0.2",
+            dst_ip="172.20.0.10",
+
+            src_port=50000,
+            dst_port=80,
+
+            protocol="TCP",
+
+            length=80,
+            payload_length=80,
+
+            header_length=20,
+            tcp_window=2048,
+        ),
+
+        CapturedPacket(
+            timestamp=8.0,
+
+            src_ip="172.20.0.10",
+            dst_ip="172.20.0.2",
+
+            src_port=80,
+            dst_port=50000,
+
+            protocol="TCP",
+
+            length=40,
+            payload_length=40,
+
+            header_length=20,
+            tcp_window=4096,
+        ),
+    ]
+
+    capture = CaptureBatch(
+        packets=packets,
+
+        started_at=0.0,
+        ended_at=8.0,
+
+        interface="test0",
+    )
+
+    result = extractor.extract(
+        capture,
+
+        feature_names=[
+            "Subflow Fwd Packets",
+            "Subflow Fwd Bytes",
+            "Subflow Bwd Packets",
+            "Subflow Bwd Bytes",
+
+            "Active Mean",
+            "Active Std",
+            "Active Max",
+            "Active Min",
+
+            "Idle Mean",
+            "Idle Std",
+            "Idle Max",
+            "Idle Min",
+        ],
+
+        strict=True,
+    )
+
+    assert (
+        result.ready_for_model
+        is True
+    )
+
+    vector = result.X[0]
+
+    # Um gap > 1s gera sfCount = 1.
+    assert vector[0] == pytest.approx(
+        2.0
+    )
+
+    assert vector[1] == pytest.approx(
+        180.0
+    )
+
+    assert vector[2] == pytest.approx(
+        2.0
+    )
+
+    assert vector[3] == pytest.approx(
+        100.0
+    )
+
+    # Dois períodos ativos:
+    # 0→1s e 7→8s.
+    assert vector[4] == pytest.approx(
+        1_000_000.0
+    )
+
+    assert vector[5] == pytest.approx(
+        0.0
+    )
+
+    assert vector[6] == pytest.approx(
+        1_000_000.0
+    )
+
+    assert vector[7] == pytest.approx(
+        1_000_000.0
+    )
+
+    # Intervalo ocioso:
+    # 1→7s = 6s.
+    assert vector[8] == pytest.approx(
+        6_000_000.0
+    )
+
+    assert vector[9] == pytest.approx(
+        0.0
+    )
+
+    assert vector[10] == pytest.approx(
+        6_000_000.0
+    )
+
+    assert vector[11] == pytest.approx(
+        6_000_000.0
+    )

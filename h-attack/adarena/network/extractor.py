@@ -14,9 +14,7 @@ from .base import (
 )
 
 
-class BasicFlowExtractor(
-    FlowExtractor
-):
+class BasicFlowExtractor(FlowExtractor):
     """
     Extrator de estatísticas de fluxo compatíveis
     com o schema utilizado pelo CIC-IDS2017.
@@ -27,321 +25,140 @@ class BasicFlowExtractor(
 
     FEATURE_ALIASES = {
         # duração
-        "flowduration": (
-            "flow_duration"
-        ),
+        "flowduration": "flow_duration",
 
         # quantidade de pacotes
-        "totalfwdpackets": (
-            "total_fwd_packets"
-        ),
-
-        "totalbackwardpackets": (
-            "total_bwd_packets"
-        ),
-
-        "totalbwdpackets": (
-            "total_bwd_packets"
-        ),
+        "totalfwdpackets": "total_fwd_packets",
+        "totalbackwardpackets": "total_bwd_packets",
+        "totalbwdpackets": "total_bwd_packets",
 
         # taxas
-        "flowpacketspersec": (
-            "flow_packets_per_sec"
-        ),
-
-        "flowpacketss": (
-            "flow_packets_per_sec"
-        ),
-
-        "flowbytespersec": (
-            "flow_bytes_per_sec"
-        ),
-
-        "flowbytess": (
-            "flow_bytes_per_sec"
-        ),
-
-        "fwdpacketspersec": (
-            "fwd_packets_per_sec"
-        ),
-
-        "fwdpacketss": (
-            "fwd_packets_per_sec"
-        ),
-
-        "bwdpacketspersec": (
-            "bwd_packets_per_sec"
-        ),
-
-        "bwdpacketss": (
-            "bwd_packets_per_sec"
-        ),
+        "flowpacketspersec": "flow_packets_per_sec",
+        "flowpacketss": "flow_packets_per_sec",
+        "flowbytespersec": "flow_bytes_per_sec",
+        "flowbytess": "flow_bytes_per_sec",
+        "fwdpacketspersec": "fwd_packets_per_sec",
+        "fwdpacketss": "fwd_packets_per_sec",
+        "bwdpacketspersec": "bwd_packets_per_sec",
+        "bwdpacketss": "bwd_packets_per_sec",
 
         # tamanho
-        "fwdpacketlengthmean": (
-            "fwd_packet_length_mean"
-        ),
-
-        "bwdpacketlengthmean": (
-            "bwd_packet_length_mean"
-        ),
-
-        "averagepacketsize": (
-            "avg_packet_size"
-        ),
-
-        "avgpacketsize": (
-            "avg_packet_size"
-        ),
-
-        "minpacketlength": (
-            "packet_length_min"
-        ),
-
-        "maxpacketlength": (
-            "packet_length_max"
-        ),
-
-        "packetlengthmean": (
-            "packet_length_mean"
-        ),
-
-        "packetlengthstd": (
-            "packet_length_std"
-        ),
+        "fwdpacketlengthmean": "fwd_packet_length_mean",
+        "bwdpacketlengthmean": "bwd_packet_length_mean",
+        "averagepacketsize": "avg_packet_size",
+        "avgpacketsize": "avg_packet_size",
+        "minpacketlength": "packet_length_min",
+        "maxpacketlength": "packet_length_max",
+        "packetlengthmean": "packet_length_mean",
+        "packetlengthstd": "packet_length_std",
 
         # flags TCP
-        "synflagcount": (
-            "syn_flag_count"
-        ),
-
-        "ackflagcount": (
-            "ack_flag_count"
-        ),
-
-        "finflagcount": (
-            "fin_flag_count"
-        ),
-
-        "pshflagcount": (
-            "psh_flag_count"
-        ),
-
-        "rstflagcount": (
-            "rst_flag_count"
-        ),
-
-        "urgflagcount": (
-            "urg_flag_count"
-        ),
+        "synflagcount": "syn_flag_count",
+        "ackflagcount": "ack_flag_count",
+        "finflagcount": "fin_flag_count",
+        "pshflagcount": "psh_flag_count",
+        "rstflagcount": "rst_flag_count",
+        "urgflagcount": "urg_flag_count",
 
         # IAT
-        "flowiatmean": (
-            "flow_iat_mean"
-        ),
-
-        "flowiatstd": (
-            "flow_iat_std"
-        ),
-
-        "flowiatmin": (
-            "flow_iat_min"
-        ),
-
-        "flowiatmax": (
-            "flow_iat_max"
-        ),
+        "flowiatmean": "flow_iat_mean",
+        "flowiatstd": "flow_iat_std",
+        "flowiatmin": "flow_iat_min",
+        "flowiatmax": "flow_iat_max",
 
         # protocolo
-        "protocol": (
-            "protocol"
-        ),
+        "protocol": "protocol",
 
         # tamanho por direção
-        "fwdpacketslengthtotal": (
-            "fwd_packets_length_total"
-        ),
+        "fwdpacketslengthtotal": "fwd_packets_length_total",
+        "bwdpacketslengthtotal": "bwd_packets_length_total",
 
-        "bwdpacketslengthtotal": (
-            "bwd_packets_length_total"
-        ),
+        "fwdpacketlengthmax": "fwd_packet_length_max",
+        "fwdpacketlengthmin": "fwd_packet_length_min",
+        "fwdpacketlengthstd": "fwd_packet_length_std",
 
-        "fwdpacketlengthmax": (
-            "fwd_packet_length_max"
-        ),
-
-        "fwdpacketlengthmin": (
-            "fwd_packet_length_min"
-        ),
-
-        "fwdpacketlengthstd": (
-            "fwd_packet_length_std"
-        ),
-
-        "bwdpacketlengthmax": (
-            "bwd_packet_length_max"
-        ),
-
-        "bwdpacketlengthmin": (
-            "bwd_packet_length_min"
-        ),
-
-        "bwdpacketlengthstd": (
-            "bwd_packet_length_std"
-        ),
+        "bwdpacketlengthmax": "bwd_packet_length_max",
+        "bwdpacketlengthmin": "bwd_packet_length_min",
+        "bwdpacketlengthstd": "bwd_packet_length_std",
 
         # IAT por direção
-        "fwdiattotal": (
-            "fwd_iat_total"
-        ),
+        "fwdiattotal": "fwd_iat_total",
+        "fwdiatmean": "fwd_iat_mean",
+        "fwdiatstd": "fwd_iat_std",
+        "fwdiatmax": "fwd_iat_max",
+        "fwdiatmin": "fwd_iat_min",
 
-        "fwdiatmean": (
-            "fwd_iat_mean"
-        ),
-
-        "fwdiatstd": (
-            "fwd_iat_std"
-        ),
-
-        "fwdiatmax": (
-            "fwd_iat_max"
-        ),
-
-        "fwdiatmin": (
-            "fwd_iat_min"
-        ),
-
-        "bwdiattotal": (
-            "bwd_iat_total"
-        ),
-
-        "bwdiatmean": (
-            "bwd_iat_mean"
-        ),
-
-        "bwdiatstd": (
-            "bwd_iat_std"
-        ),
-
-        "bwdiatmax": (
-            "bwd_iat_max"
-        ),
-
-        "bwdiatmin": (
-            "bwd_iat_min"
-        ),
+        "bwdiattotal": "bwd_iat_total",
+        "bwdiatmean": "bwd_iat_mean",
+        "bwdiatstd": "bwd_iat_std",
+        "bwdiatmax": "bwd_iat_max",
+        "bwdiatmin": "bwd_iat_min",
 
         # flags por direção
-        "fwdpshflags": (
-            "fwd_psh_flags"
-        ),
-
-        "bwdpshflags": (
-            "bwd_psh_flags"
-        ),
-
-        "fwdurgflags": (
-            "fwd_urg_flags"
-        ),
-
-        "bwdurgflags": (
-            "bwd_urg_flags"
-        ),
+        "fwdpshflags": "fwd_psh_flags",
+        "bwdpshflags": "bwd_psh_flags",
+        "fwdurgflags": "fwd_urg_flags",
+        "bwdurgflags": "bwd_urg_flags",
 
         # tamanho global
-        "packetlengthmin": (
-            "packet_length_min"
-        ),
-
-        "packetlengthmax": (
-            "packet_length_max"
-        ),
-
-        "packetlengthvariance": (
-            "packet_length_variance"
-        ),
+        "packetlengthmin": "packet_length_min",
+        "packetlengthmax": "packet_length_max",
+        "packetlengthvariance": "packet_length_variance",
 
         # TCP flags
-        "cweflagcount": (
-            "cwr_flag_count"
-        ),
-
-        "cwrflagcount": (
-            "cwr_flag_count"
-        ),
-
-        "eceflagcount": (
-            "ece_flag_count"
-        ),
+        "cweflagcount": "cwr_flag_count",
+        "cwrflagcount": "cwr_flag_count",
+        "eceflagcount": "ece_flag_count",
 
         # razão e segmentos
-        "downupratio": (
-            "down_up_ratio"
-        ),
-
-        "avgfwdsegmentsize": (
-            "avg_fwd_segment_size"
-        ),
-
-        "avgbwdsegmentsize": (
-            "avg_bwd_segment_size"
-        ),
+        "downupratio": "down_up_ratio",
+        "avgfwdsegmentsize": "avg_fwd_segment_size",
+        "avgbwdsegmentsize": "avg_bwd_segment_size",
 
         # payload forward
-        "fwdactdatapackets": (
-            "fwd_act_data_packets"
-        ),
-
-        "fwdactdatapkts": (
-            "fwd_act_data_packets"
-        ),
-
-        "actdatapktfwd": (
-            "fwd_act_data_packets"
-        ),
+        "fwdactdatapackets": "fwd_act_data_packets",
+        "fwdactdatapkts": "fwd_act_data_packets",
+        "actdatapktfwd": "fwd_act_data_packets",
 
         # headers
-        "fwdheaderlength": (
-            "fwd_header_length"
-        ),
-
-        "bwdheaderlength": (
-            "bwd_header_length"
-        ),
+        "fwdheaderlength": "fwd_header_length",
+        "bwdheaderlength": "bwd_header_length",
 
         # janela TCP inicial
-        "initfwdwinbytes": (
-            "init_fwd_win_bytes"
-        ),
-
-        "initbwdwinbytes": (
-            "init_bwd_win_bytes"
-        ),
+        "initfwdwinbytes": "init_fwd_win_bytes",
+        "initbwdwinbytes": "init_bwd_win_bytes",
 
         # aliases de versões antigas
-        "initwinbytesforward": (
-            "init_fwd_win_bytes"
-        ),
-
-        "initwinbytesbackward": (
-            "init_bwd_win_bytes"
-        ),
+        "initwinbytesforward": "init_fwd_win_bytes",
+        "initwinbytesbackward": "init_bwd_win_bytes",
 
         # tamanho mínimo do segmento forward
-        "fwdsegsizemin": (
-            "fwd_seg_size_min"
-        ),
+        "fwdsegsizemin": "fwd_seg_size_min",
+        "minsegsizeforward": "fwd_seg_size_min",
 
-        "minsegsizeforward": (
-            "fwd_seg_size_min"
-        ),
+        # subflows
+        "subflowfwdpackets": "subflow_fwd_packets",
+        "subflowfwdbytes": "subflow_fwd_bytes",
+        "subflowbwdpackets": "subflow_bwd_packets",
+        "subflowbwdbytes": "subflow_bwd_bytes",
+
+        # active
+        "activemean": "active_mean",
+        "activestd": "active_std",
+        "activemax": "active_max",
+        "activemin": "active_min",
+
+        # idle
+        "idlemean": "idle_mean",
+        "idlestd": "idle_std",
+        "idlemax": "idle_max",
+        "idlemin": "idle_min",
     }
 
     @staticmethod
     def _normalize_name(
         name: str,
     ) -> str:
-
         return "".join(
             char.lower()
             for char in name
@@ -353,17 +170,12 @@ class BasicFlowExtractor(
         cls,
         name: str,
     ) -> str | None:
-
-        normalized = (
-            cls._normalize_name(
-                name
-            )
+        normalized = cls._normalize_name(
+            name
         )
 
-        return (
-            cls.FEATURE_ALIASES.get(
-                normalized
-            )
+        return cls.FEATURE_ALIASES.get(
+            normalized
         )
 
     @staticmethod
@@ -371,7 +183,6 @@ class BasicFlowExtractor(
         packet: CapturedPacket,
         source: bool,
     ):
-
         if source:
             return (
                 packet.src_ip,
@@ -388,7 +199,6 @@ class BasicFlowExtractor(
         cls,
         packet: CapturedPacket,
     ) -> tuple:
-
         src = cls._endpoint(
             packet,
             True,
@@ -416,18 +226,15 @@ class BasicFlowExtractor(
         self,
         feature_names: Sequence[str],
     ) -> FeatureSupportReport:
-
         requested = tuple(
             str(feature)
-            for feature
-            in feature_names
+            for feature in feature_names
         )
 
         supported = []
         unsupported = []
 
         for feature in requested:
-
             if (
                 self._canonical_feature(
                     feature
@@ -437,7 +244,6 @@ class BasicFlowExtractor(
                 unsupported.append(
                     feature
                 )
-
             else:
                 supported.append(
                     feature
@@ -445,11 +251,9 @@ class BasicFlowExtractor(
 
         return FeatureSupportReport(
             requested_features=requested,
-
             supported_features=tuple(
                 supported
             ),
-
             unsupported_features=tuple(
                 unsupported
             ),
@@ -462,11 +266,9 @@ class BasicFlowExtractor(
         feature_names: Sequence[str],
         strict: bool = True,
     ) -> FlowFeatureBatch:
-
         feature_names = tuple(
             str(name)
-            for name
-            in feature_names
+            for name in feature_names
         )
 
         support = self.support(
@@ -481,14 +283,10 @@ class BasicFlowExtractor(
             self._canonical_feature(
                 feature
             )
-            for feature
-            in feature_names
+            for feature in feature_names
         ]
 
-        if (
-            strict
-            and unsupported
-        ):
+        if strict and unsupported:
             raise ValueError(
                 "FlowExtractor ainda não "
                 "suporta as features: "
@@ -502,7 +300,6 @@ class BasicFlowExtractor(
         )
 
         for packet in capture.packets:
-
             flows[
                 self._group_key(
                     packet
@@ -517,27 +314,22 @@ class BasicFlowExtractor(
         for index, packets in enumerate(
             flows.values()
         ):
-
             packets = sorted(
                 packets,
                 key=lambda p: p.timestamp,
             )
 
-            values = (
-                self._calculate_flow(
-                    packets
-                )
+            values = self._calculate_flow(
+                packets
             )
 
             vector = []
 
             for resolved in canonical:
-
                 if resolved is None:
                     vector.append(
                         np.nan
                     )
-
                 else:
                     vector.append(
                         values[resolved]
@@ -566,7 +358,6 @@ class BasicFlowExtractor(
                 vectors,
                 dtype=np.float32,
             )
-
         else:
             X = np.empty(
                 (
@@ -578,28 +369,20 @@ class BasicFlowExtractor(
 
         return FlowFeatureBatch(
             X=X,
-
-            feature_names=(
-                feature_names
-            ),
-
+            feature_names=feature_names,
             flow_ids=tuple(
                 flow_ids
             ),
-
             unsupported_features=tuple(
                 unsupported
             ),
-
             metadata={
                 "flows": len(
                     vectors
                 ),
-
                 "packets": len(
                     capture.packets
                 ),
-
                 "strict": strict,
             },
         )
@@ -610,14 +393,12 @@ class BasicFlowExtractor(
             CapturedPacket
         ],
     ) -> dict[str, float]:
-
         first = packets[0]
 
         forward = []
         backward = []
 
         for packet in packets:
-
             is_forward = (
                 packet.src_ip
                 == first.src_ip
@@ -633,7 +414,6 @@ class BasicFlowExtractor(
                 forward.append(
                     packet
                 )
-
             else:
                 backward.append(
                     packet
@@ -642,8 +422,7 @@ class BasicFlowExtractor(
         timestamps = np.asarray(
             [
                 packet.timestamp
-                for packet
-                in packets
+                for packet in packets
             ],
             dtype=np.float64,
         )
@@ -661,12 +440,11 @@ class BasicFlowExtractor(
             * 1_000_000.0
         )
 
-        # Tamanho de payload observado.
+        # Payload observado.
         lengths = np.asarray(
             [
                 packet.payload_length
-                for packet
-                in packets
+                for packet in packets
             ],
             dtype=np.float64,
         )
@@ -674,8 +452,7 @@ class BasicFlowExtractor(
         fwd_lengths = np.asarray(
             [
                 packet.payload_length
-                for packet
-                in forward
+                for packet in forward
             ],
             dtype=np.float64,
         )
@@ -683,8 +460,7 @@ class BasicFlowExtractor(
         bwd_lengths = np.asarray(
             [
                 packet.payload_length
-                for packet
-                in backward
+                for packet in backward
             ],
             dtype=np.float64,
         )
@@ -692,11 +468,7 @@ class BasicFlowExtractor(
         def directional_iats(
             direction_packets,
         ) -> np.ndarray:
-
-            if (
-                len(direction_packets)
-                <= 1
-            ):
+            if len(direction_packets) <= 1:
                 return np.asarray(
                     [],
                     dtype=np.float64,
@@ -725,7 +497,6 @@ class BasicFlowExtractor(
                 )
                 * 1_000_000.0
             )
-
         else:
             flow_iats = np.asarray(
                 [],
@@ -743,7 +514,6 @@ class BasicFlowExtractor(
         def mean_or_zero(
             values,
         ) -> float:
-
             if len(values) == 0:
                 return 0.0
 
@@ -756,7 +526,6 @@ class BasicFlowExtractor(
         def min_or_zero(
             values,
         ) -> float:
-
             if len(values) == 0:
                 return 0.0
 
@@ -769,7 +538,6 @@ class BasicFlowExtractor(
         def max_or_zero(
             values,
         ) -> float:
-
             if len(values) == 0:
                 return 0.0
 
@@ -782,7 +550,6 @@ class BasicFlowExtractor(
         def sum_or_zero(
             values,
         ) -> float:
-
             if len(values) == 0:
                 return 0.0
 
@@ -795,7 +562,6 @@ class BasicFlowExtractor(
         def std_or_zero(
             values,
         ) -> float:
-
             if len(values) <= 1:
                 return 0.0
 
@@ -809,7 +575,6 @@ class BasicFlowExtractor(
         def variance_or_zero(
             values,
         ) -> float:
-
             if len(values) <= 1:
                 return 0.0
 
@@ -823,7 +588,6 @@ class BasicFlowExtractor(
         def rate(
             value: float,
         ) -> float:
-
             if duration_seconds <= 0:
                 return 0.0
 
@@ -836,7 +600,6 @@ class BasicFlowExtractor(
             flag: str,
             selected_packets=None,
         ) -> float:
-
             source = (
                 packets
                 if selected_packets is None
@@ -847,17 +610,14 @@ class BasicFlowExtractor(
                 sum(
                     flag
                     in packet.tcp_flags
-                    for packet
-                    in source
+                    for packet in source
                 )
             )
 
         def initial_tcp_window(
             direction_packets,
         ) -> float:
-
             for packet in direction_packets:
-
                 if (
                     packet.tcp_window
                     is not None
@@ -895,32 +655,27 @@ class BasicFlowExtractor(
 
         fwd_act_data_packets = float(
             sum(
-                packet.payload_length
-                >= 1
-                for packet
-                in forward
+                packet.payload_length >= 1
+                for packet in forward
             )
         )
 
-        # Headers acumulados por direção.
+        # Headers
         fwd_header_length = float(
             sum(
                 packet.header_length
-                for packet
-                in forward
+                for packet in forward
             )
         )
 
         bwd_header_length = float(
             sum(
                 packet.header_length
-                for packet
-                in backward
+                for packet in backward
             )
         )
 
-        # Janela TCP observada no primeiro pacote
-        # TCP de cada direção.
+        # Janelas TCP
         init_fwd_win_bytes = (
             initial_tcp_window(
                 forward
@@ -933,12 +688,10 @@ class BasicFlowExtractor(
             )
         )
 
-        # Menor tamanho de header observado
-        # no sentido forward.
+        # Segmento mínimo forward
         fwd_header_sizes = [
             packet.header_length
-            for packet
-            in forward
+            for packet in forward
             if packet.header_length > 0
         ]
 
@@ -950,6 +703,187 @@ class BasicFlowExtractor(
             )
             if fwd_header_sizes
             else 0.0
+        )
+
+        # -----------------------------------------
+        # Subflows
+        # -----------------------------------------
+
+        SUBFLOW_GAP_SECONDS = 1.0
+
+        subflow_count = 0
+        previous_timestamp = None
+
+        for packet in packets:
+            if previous_timestamp is None:
+                previous_timestamp = (
+                    packet.timestamp
+                )
+                continue
+
+            gap = (
+                packet.timestamp
+                - previous_timestamp
+            )
+
+            if (
+                gap
+                > SUBFLOW_GAP_SECONDS
+            ):
+                subflow_count += 1
+
+            previous_timestamp = (
+                packet.timestamp
+            )
+
+        if subflow_count > 0:
+            subflow_fwd_packets = float(
+                fwd_count
+                // subflow_count
+            )
+
+            subflow_fwd_bytes = float(
+                int(
+                    np.sum(
+                        fwd_lengths
+                    )
+                )
+                // subflow_count
+            )
+
+            subflow_bwd_packets = float(
+                bwd_count
+                // subflow_count
+            )
+
+            subflow_bwd_bytes = float(
+                int(
+                    np.sum(
+                        bwd_lengths
+                    )
+                )
+                // subflow_count
+            )
+        else:
+            subflow_fwd_packets = 0.0
+            subflow_fwd_bytes = 0.0
+            subflow_bwd_packets = 0.0
+            subflow_bwd_bytes = 0.0
+
+        # -----------------------------------------
+        # Active / Idle
+        # -----------------------------------------
+
+        ACTIVITY_TIMEOUT_SECONDS = 5.0
+
+        active_periods = []
+        idle_periods = []
+
+        start_active = (
+            packets[0].timestamp
+        )
+
+        end_active = (
+            packets[0].timestamp
+        )
+
+        for packet in packets[1:]:
+            current = (
+                packet.timestamp
+            )
+
+            gap = (
+                current
+                - end_active
+            )
+
+            if (
+                gap
+                > ACTIVITY_TIMEOUT_SECONDS
+            ):
+                active_duration = (
+                    end_active
+                    - start_active
+                )
+
+                if active_duration > 0:
+                    active_periods.append(
+                        active_duration
+                        * 1_000_000.0
+                    )
+
+                idle_periods.append(
+                    gap
+                    * 1_000_000.0
+                )
+
+                start_active = (
+                    current
+                )
+
+                end_active = (
+                    current
+                )
+
+            else:
+                end_active = (
+                    current
+                )
+
+        # Como estamos reconstruindo um fluxo já
+        # capturado, encerramos também o último
+        # período ativo.
+        final_active_duration = (
+            end_active
+            - start_active
+        )
+
+        if final_active_duration > 0:
+            active_periods.append(
+                final_active_duration
+                * 1_000_000.0
+            )
+
+        active_values = np.asarray(
+            active_periods,
+            dtype=np.float64,
+        )
+
+        idle_values = np.asarray(
+            idle_periods,
+            dtype=np.float64,
+        )
+
+        active_mean = mean_or_zero(
+            active_values
+        )
+
+        active_std = std_or_zero(
+            active_values
+        )
+
+        active_max = max_or_zero(
+            active_values
+        )
+
+        active_min = min_or_zero(
+            active_values
+        )
+
+        idle_mean = mean_or_zero(
+            idle_values
+        )
+
+        idle_std = std_or_zero(
+            idle_values
+        )
+
+        idle_max = max_or_zero(
+            idle_values
+        )
+
+        idle_min = min_or_zero(
+            idle_values
         )
 
         return {
@@ -1255,8 +1189,6 @@ class BasicFlowExtractor(
                 )
             ),
 
-            # CWE no dataset corresponde
-            # à flag CWR do TCP.
             "cwr_flag_count": (
                 flag_count(
                     "C"
@@ -1299,7 +1231,7 @@ class BasicFlowExtractor(
                 bwd_header_length
             ),
 
-            # Janelas TCP iniciais
+            # Janelas TCP
             "init_fwd_win_bytes": (
                 init_fwd_win_bytes
             ),
@@ -1311,5 +1243,56 @@ class BasicFlowExtractor(
             # Segmento mínimo forward
             "fwd_seg_size_min": (
                 fwd_seg_size_min
+            ),
+
+            # Subflows
+            "subflow_fwd_packets": (
+                subflow_fwd_packets
+            ),
+
+            "subflow_fwd_bytes": (
+                subflow_fwd_bytes
+            ),
+
+            "subflow_bwd_packets": (
+                subflow_bwd_packets
+            ),
+
+            "subflow_bwd_bytes": (
+                subflow_bwd_bytes
+            ),
+
+            # Active
+            "active_mean": (
+                active_mean
+            ),
+
+            "active_std": (
+                active_std
+            ),
+
+            "active_max": (
+                active_max
+            ),
+
+            "active_min": (
+                active_min
+            ),
+
+            # Idle
+            "idle_mean": (
+                idle_mean
+            ),
+
+            "idle_std": (
+                idle_std
+            ),
+
+            "idle_max": (
+                idle_max
+            ),
+
+            "idle_min": (
+                idle_min
             ),
         }
