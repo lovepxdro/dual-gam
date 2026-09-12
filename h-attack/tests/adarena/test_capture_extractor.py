@@ -723,3 +723,120 @@ def test_extractor_reconstroi_subflows_active_idle():
     assert vector[11] == pytest.approx(
         6_000_000.0
     )
+
+def test_extractor_reconstroi_bulk():
+
+    extractor = (
+        BasicFlowExtractor()
+    )
+
+    packets = [
+        CapturedPacket(
+            timestamp=10.0,
+            src_ip="172.20.0.2",
+            dst_ip="172.20.0.10",
+            src_port=50000,
+            dst_port=80,
+            protocol="TCP",
+            length=120,
+            payload_length=100,
+            header_length=20,
+            tcp_window=4096,
+        ),
+
+        CapturedPacket(
+            timestamp=10.2,
+            src_ip="172.20.0.2",
+            dst_ip="172.20.0.10",
+            src_port=50000,
+            dst_port=80,
+            protocol="TCP",
+            length=220,
+            payload_length=200,
+            header_length=20,
+            tcp_window=4096,
+        ),
+
+        CapturedPacket(
+            timestamp=10.4,
+            src_ip="172.20.0.2",
+            dst_ip="172.20.0.10",
+            src_port=50000,
+            dst_port=80,
+            protocol="TCP",
+            length=320,
+            payload_length=300,
+            header_length=20,
+            tcp_window=4096,
+        ),
+
+        CapturedPacket(
+            timestamp=10.6,
+            src_ip="172.20.0.2",
+            dst_ip="172.20.0.10",
+            src_port=50000,
+            dst_port=80,
+            protocol="TCP",
+            length=420,
+            payload_length=400,
+            header_length=20,
+            tcp_window=4096,
+        ),
+    ]
+
+    capture = CaptureBatch(
+        packets=packets,
+
+        started_at=10.0,
+        ended_at=10.6,
+
+        interface="test0",
+    )
+
+    result = extractor.extract(
+        capture,
+
+        feature_names=[
+            "Fwd Avg Bytes/Bulk",
+            "Fwd Avg Packets/Bulk",
+            "Fwd Avg Bulk Rate",
+
+            "Bwd Avg Bytes/Bulk",
+            "Bwd Avg Packets/Bulk",
+            "Bwd Avg Bulk Rate",
+        ],
+
+        strict=True,
+    )
+
+    assert (
+        result.ready_for_model
+        is True
+    )
+
+    vector = result.X[0]
+
+    assert vector[0] == pytest.approx(
+        1000.0
+    )
+
+    assert vector[1] == pytest.approx(
+        4.0
+    )
+
+    assert vector[2] == pytest.approx(
+        1666.0
+    )
+
+    # Não há bulk backward.
+    assert vector[3] == pytest.approx(
+        0.0
+    )
+
+    assert vector[4] == pytest.approx(
+        0.0
+    )
+
+    assert vector[5] == pytest.approx(
+        0.0
+    )
