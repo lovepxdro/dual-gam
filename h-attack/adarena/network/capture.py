@@ -138,6 +138,8 @@ class ScapyPacketCapture(Capture):
         tcp_flags = ""
 
         payload_length = 0
+        header_length = 0
+        tcp_window = None
 
         if TCP in packet:
             transport = packet[TCP]
@@ -162,6 +164,20 @@ class ScapyPacketCapture(Capture):
                 )
             )
 
+            tcp_window = int(
+                transport.window
+            )
+
+            data_offset = (
+                transport.dataofs
+                if transport.dataofs is not None
+                else 5
+            )
+
+            header_length = int(
+                data_offset * 4
+            )
+
         elif UDP in packet:
             transport = packet[UDP]
 
@@ -180,6 +196,8 @@ class ScapyPacketCapture(Capture):
                     transport.payload
                 )
             )
+
+            header_length = 8
 
         else:
             protocol = str(
@@ -212,5 +230,13 @@ class ScapyPacketCapture(Capture):
 
             payload_length=(
                 payload_length
+            ),
+
+            header_length=(
+                header_length
+            ),
+
+            tcp_window=(
+                tcp_window
             ),
         )

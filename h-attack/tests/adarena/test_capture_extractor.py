@@ -49,6 +49,10 @@ def _capture_batch():
             protocol="TCP",
 
             length=100,
+            payload_length=100,
+
+            header_length=20,
+            tcp_window=4096,
 
             tcp_flags="S",
         ),
@@ -65,6 +69,10 @@ def _capture_batch():
             protocol="TCP",
 
             length=60,
+            payload_length=60,
+
+            header_length=20,
+            tcp_window=8192,
 
             tcp_flags="SA",
         ),
@@ -81,6 +89,10 @@ def _capture_batch():
             protocol="TCP",
 
             length=80,
+            payload_length=80,
+
+            header_length=24,
+            tcp_window=2048,
 
             tcp_flags="A",
         ),
@@ -151,6 +163,7 @@ def test_scapy_capture_converte_pacote_sem_sniff():
             sport=50000,
             dport=80,
             flags="SA",
+            window=4096,
         )
         /
         Raw(
@@ -197,6 +210,16 @@ def test_scapy_capture_converte_pacote_sem_sniff():
     assert (
         record.payload_length
         == 3
+    )
+
+    assert (
+        record.header_length
+        == 20
+    )
+
+    assert (
+        record.tcp_window
+        == 4096
     )
 
     assert "S" in (
@@ -325,6 +348,7 @@ def test_extractor_nao_inventa_feature_desconhecida():
         ]
     )
 
+
 def test_extractor_reporta_cobertura_de_features():
 
     extractor = (
@@ -348,12 +372,12 @@ def test_extractor_reporta_cobertura_de_features():
 
     assert (
         report.supported_count
-        == 3
+        == 4
     )
 
     assert (
         report.unsupported_count
-        == 2
+        == 1
     )
 
     assert (
@@ -362,13 +386,13 @@ def test_extractor_reporta_cobertura_de_features():
             "Flow Duration",
             "Flow Packets/s",
             "SYN Flag Count",
+            "Init_Win_bytes_forward",
         )
     )
 
     assert (
         report.unsupported_features
         == (
-            "Init_Win_bytes_forward",
             "Feature Impossivel",
         )
     )
@@ -376,11 +400,152 @@ def test_extractor_reporta_cobertura_de_features():
     assert (
         report.coverage
         == pytest.approx(
-            3 / 5
+            4 / 5
         )
     )
 
     assert (
         report.complete
         is False
+    )
+
+
+def test_extractor_suporta_bloco_estatistico_cicids():
+
+    extractor = (
+        BasicFlowExtractor()
+    )
+
+    features = [
+        "Fwd Packets Length Total",
+        "Bwd Packets Length Total",
+
+        "Fwd Packet Length Max",
+        "Fwd Packet Length Min",
+        "Fwd Packet Length Std",
+
+        "Bwd Packet Length Max",
+        "Bwd Packet Length Min",
+        "Bwd Packet Length Std",
+
+        "Fwd IAT Total",
+        "Fwd IAT Mean",
+        "Fwd IAT Std",
+        "Fwd IAT Max",
+        "Fwd IAT Min",
+
+        "Bwd IAT Total",
+        "Bwd IAT Mean",
+        "Bwd IAT Std",
+        "Bwd IAT Max",
+        "Bwd IAT Min",
+
+        "Fwd PSH Flags",
+        "Bwd PSH Flags",
+
+        "Fwd URG Flags",
+        "Bwd URG Flags",
+
+        "Packet Length Min",
+        "Packet Length Max",
+        "Packet Length Variance",
+
+        "CWE Flag Count",
+        "ECE Flag Count",
+
+        "Down/Up Ratio",
+
+        "Avg Fwd Segment Size",
+        "Avg Bwd Segment Size",
+
+        "Fwd Act Data Packets",
+    ]
+
+    report = extractor.support(
+        features
+    )
+
+    assert (
+        report.total
+        == 31
+    )
+
+    assert (
+        report.supported_count
+        == 31
+    )
+
+    assert (
+        report.unsupported_count
+        == 0
+    )
+
+    assert (
+        report.complete
+        is True
+    )
+
+
+def test_extractor_reconstroi_headers_e_janelas_tcp():
+
+    extractor = (
+        BasicFlowExtractor()
+    )
+
+    result = extractor.extract(
+        _capture_batch(),
+
+        feature_names=[
+            "Fwd Header Length",
+            "Bwd Header Length",
+            "Init Fwd Win Bytes",
+            "Init Bwd Win Bytes",
+            "Fwd Seg Size Min",
+        ],
+
+        strict=True,
+    )
+
+    assert (
+        result.X.shape
+        == (
+            1,
+            5,
+        )
+    )
+
+    assert (
+        result.ready_for_model
+        is True
+    )
+
+    vector = result.X[0]
+
+    # forward:
+    # pacote 1 = 20 bytes
+    # pacote 3 = 24 bytes
+    assert vector[0] == pytest.approx(
+        44.0
+    )
+
+    # backward:
+    # pacote 2 = 20 bytes
+    assert vector[1] == pytest.approx(
+        20.0
+    )
+
+    # primeira janela TCP forward
+    assert vector[2] == pytest.approx(
+        4096.0
+    )
+
+    # primeira janela TCP backward
+    assert vector[3] == pytest.approx(
+        8192.0
+    )
+
+    # menor header forward:
+    # min(20, 24)
+    assert vector[4] == pytest.approx(
+        20.0
     )

@@ -274,10 +274,7 @@ def test_pipeline_bloqueia_feature_nao_reconstruida():
     prep = _preprocessor(
         [
             "Flow Duration",
-
-            # BasicFlowExtractor ainda
-            # não reconstrói esta feature.
-            "Init_Win_bytes_forward",
+            "Feature Impossivel",
         ]
     )
 
@@ -314,13 +311,11 @@ def test_pipeline_bloqueia_feature_nao_reconstruida():
     )
 
     assert (
-        "Init_Win_bytes_forward"
+        "Feature Impossivel"
         in report
         .unsupported_features
     )
 
-    # O ponto principal:
-    # o Defensor nunca foi chamado.
     assert (
         predictor.calls
         == 0

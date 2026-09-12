@@ -50,11 +50,6 @@ class NetworkBackend(ABC):
 
 @dataclass(frozen=True, slots=True)
 class CapturedPacket:
-    """
-    Representação mínima e independente de biblioteca
-    de um pacote observado no ambiente experimental.
-    """
-
     timestamp: float
 
     src_ip: str
@@ -70,6 +65,10 @@ class CapturedPacket:
     tcp_flags: str = ""
 
     payload_length: int = 0
+
+    header_length: int = 0
+
+    tcp_window: int | None = None
 
     metadata: dict[str, Any] = field(
         default_factory=dict
