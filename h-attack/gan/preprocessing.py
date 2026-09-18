@@ -157,18 +157,45 @@ class Preprocessador:
         y: np.ndarray,
     ) -> pd.DataFrame:
         if X.ndim != 2:
-            raise ValueError("X deve possuir shape [N, features]")
-        if len(X) != len(y):
-            raise ValueError("X e y possuem quantidades diferentes de amostras")
-        if self.feature_names and X.shape[1] != len(self.feature_names):
             raise ValueError(
-                "Número de features incompatível com feature_names: "
-                f"{X.shape[1]} != {len(self.feature_names)}"
+                "X deve possuir shape [N, features]"
             )
 
-        columns = self.feature_names or [f"feature_{i}" for i in range(X.shape[1])]
-        df = pd.DataFrame(X, columns=columns)
+        if len(X) != len(y):
+            raise ValueError(
+                "X e y possuem quantidades "
+                "diferentes de amostras"
+            )
+
+        if (
+            self.feature_names
+            and X.shape[1]
+            != len(self.feature_names)
+        ):
+            raise ValueError(
+                "Número de features incompatível "
+                "com feature_names: "
+                f"{X.shape[1]} != "
+                f"{len(self.feature_names)}"
+            )
+
+        columns = (
+            self.feature_names
+            or [
+                f"feature_{i}"
+                for i in range(
+                    X.shape[1]
+                )
+            ]
+        )
+
+        df = pd.DataFrame(
+            X,
+            columns=columns,
+        )
+
         df["_label"] = y
+
         return df
 
     def auditar_duplicatas(
@@ -177,13 +204,31 @@ class Preprocessador:
         y: np.ndarray,
     ) -> int:
         """Conta duplicatas exatas considerando features + label."""
-        df = self._dataframe_com_label(X, y)
-        duplicadas = int(df.duplicated(keep="first").sum())
+
+        df = self._dataframe_com_label(
+            X,
+            y,
+        )
+
+        duplicadas = int(
+            df
+            .duplicated(
+                keep="first"
+            )
+            .sum()
+        )
 
         if duplicadas:
-            logger.warning("    Duplicatas exatas no dataset: %d", duplicadas)
+            logger.warning(
+                "    Duplicatas exatas "
+                "no dataset: %d",
+                duplicadas,
+            )
         else:
-            logger.info("    Duplicatas exatas no dataset: 0")
+            logger.info(
+                "    Duplicatas exatas "
+                "no dataset: 0"
+            )
 
         return duplicadas
 
@@ -191,42 +236,84 @@ class Preprocessador:
         self,
         X: np.ndarray,
         y: np.ndarray,
-    ) -> tuple[np.ndarray, np.ndarray, int]:
+    ) -> tuple[
+        np.ndarray,
+        np.ndarray,
+        int,
+    ]:
         """
         Remove duplicatas exatas antes do split.
 
-        A remoção ocorre sobre ``features + label``. Isso evita que cópias da
-        mesma observação terminem em conjuntos distintos e contaminem a avaliação.
+        A remoção ocorre sobre ``features + label``.
+        Isso evita que cópias da mesma observação
+        terminem em conjuntos distintos e contaminem
+        a avaliação.
         """
-        df = self._dataframe_com_label(X, y)
-        duplicate_mask = df.duplicated(keep="first")
-        n_removed = int(duplicate_mask.sum())
+
+        df = self._dataframe_com_label(
+            X,
+            y,
+        )
+
+        duplicate_mask = (
+            df.duplicated(
+                keep="first"
+            )
+        )
+
+        n_removed = int(
+            duplicate_mask.sum()
+        )
 
         if n_removed == 0:
-            return X, y, 0
+            return (
+                X,
+                y,
+                0,
+            )
 
-        keep = ~duplicate_mask.to_numpy()
+        keep = (
+            ~duplicate_mask
+            .to_numpy()
+        )
+
         X_unique = X[keep]
         y_unique = y[keep]
 
         logger.warning(
-            "    Duplicatas removidas antes do split: %d | amostras restantes: %d",
+            "    Duplicatas removidas antes "
+            "do split: %d | "
+            "amostras restantes: %d",
             n_removed,
             len(X_unique),
         )
-        return X_unique, y_unique, n_removed
+
+        return (
+            X_unique,
+            y_unique,
+            n_removed,
+        )
 
     def _hashes(
         self,
         X: np.ndarray,
         y: np.ndarray,
     ) -> set[int]:
-        df = self._dataframe_com_label(X, y)
+
+        df = self._dataframe_com_label(
+            X,
+            y,
+        )
+
         return set(
-            pd.util.hash_pandas_object(
+            pd.util
+            .hash_pandas_object(
                 df,
                 index=False,
-            ).to_numpy(dtype=np.uint64)
+            )
+            .to_numpy(
+                dtype=np.uint64
+            )
         )
 
     def auditar_isolamento_triplo(
@@ -238,37 +325,81 @@ class Preprocessador:
         X_test: np.ndarray,
         y_test: np.ndarray,
     ) -> dict[str, int]:
-        """Verifica interseções exatas entre treino, validação e teste."""
-        hashes_train = self._hashes(X_train, y_train)
-        hashes_val = self._hashes(X_val, y_val)
-        hashes_test = self._hashes(X_test, y_test)
+        """
+        Verifica interseções exatas entre
+        treino, validação e teste.
+        """
+
+        hashes_train = self._hashes(
+            X_train,
+            y_train,
+        )
+
+        hashes_val = self._hashes(
+            X_val,
+            y_val,
+        )
+
+        hashes_test = self._hashes(
+            X_test,
+            y_test,
+        )
 
         intersecoes = {
-            "treino_validacao": len(hashes_train & hashes_val),
-            "treino_teste": len(hashes_train & hashes_test),
-            "validacao_teste": len(hashes_val & hashes_test),
+            "treino_validacao": len(
+                hashes_train
+                & hashes_val
+            ),
+
+            "treino_teste": len(
+                hashes_train
+                & hashes_test
+            ),
+
+            "validacao_teste": len(
+                hashes_val
+                & hashes_test
+            ),
         }
 
         logger.info(
-            "    Interseção treino/validação: %d",
-            intersecoes["treino_validacao"],
-        )
-        logger.info(
-            "    Interseção treino/teste: %d",
-            intersecoes["treino_teste"],
-        )
-        logger.info(
-            "    Interseção validação/teste: %d",
-            intersecoes["validacao_teste"],
+            "    Interseção "
+            "treino/validação: %d",
+            intersecoes[
+                "treino_validacao"
+            ],
         )
 
-        if any(intersecoes.values()):
+        logger.info(
+            "    Interseção "
+            "treino/teste: %d",
+            intersecoes[
+                "treino_teste"
+            ],
+        )
+
+        logger.info(
+            "    Interseção "
+            "validação/teste: %d",
+            intersecoes[
+                "validacao_teste"
+            ],
+        )
+
+        if any(
+            intersecoes.values()
+        ):
             raise RuntimeError(
-                "Data leakage detectado entre treino, validação e teste: "
+                "Data leakage detectado entre "
+                "treino, validação e teste: "
                 f"{intersecoes}"
             )
 
-        logger.info("    Isolamento treino/validação/teste: OK")
+        logger.info(
+            "    Isolamento "
+            "treino/validação/teste: OK"
+        )
+
         return intersecoes
 
     def split_e_normalizar(
@@ -278,6 +409,8 @@ class Preprocessador:
         test_size: float = 0.2,
         validation_size: float = 0.1,
         random_state: int = 42,
+        *,
+        fit_scaler: bool = True,
     ) -> tuple[
         np.ndarray,
         np.ndarray,
@@ -287,22 +420,64 @@ class Preprocessador:
         np.ndarray,
     ]:
         """
-        Remove duplicatas, divide em treino/validação/teste e normaliza.
+        Remove duplicatas, divide em
+        treino/validação/teste e normaliza.
 
-        Por padrão: 70% treino, 10% validação e 20% teste.
-        O StandardScaler é ajustado exclusivamente sobre o conjunto de treino.
+        Quando fit_scaler=True, o StandardScaler é
+        ajustado exclusivamente sobre o conjunto de
+        treino.
+
+        Quando fit_scaler=False, utiliza um scaler
+        previamente ajustado, como em experimentos
+        de simulação baseados em checkpoints.
         """
-        if test_size <= 0 or validation_size <= 0:
-            raise ValueError("test_size e validation_size devem ser > 0")
-        if test_size + validation_size >= 1:
-            raise ValueError("test_size + validation_size deve ser menor que 1")
 
-        logger.info("  Auditoria:")
-        n_duplicates = self.auditar_duplicatas(X, y)
-        X, y, n_removed = self.remover_duplicatas(X, y)
+        if (
+            test_size <= 0
+            or validation_size <= 0
+        ):
+            raise ValueError(
+                "test_size e validation_size "
+                "devem ser > 0"
+            )
+
+        if (
+            test_size
+            + validation_size
+            >= 1
+        ):
+            raise ValueError(
+                "test_size + validation_size "
+                "deve ser menor que 1"
+            )
+
+        logger.info(
+            "  Auditoria:"
+        )
+
+        n_duplicates = (
+            self.auditar_duplicatas(
+                X,
+                y,
+            )
+        )
+
+        (
+            X,
+            y,
+            n_removed,
+        ) = self.remover_duplicatas(
+            X,
+            y,
+        )
 
         # 1) Separa o teste final.
-        X_temp, X_test, y_temp, y_test = train_test_split(
+        (
+            X_temp,
+            X_test,
+            y_temp,
+            y_test,
+        ) = train_test_split(
             X,
             y,
             test_size=test_size,
@@ -310,114 +485,356 @@ class Preprocessador:
             stratify=y,
         )
 
-        # 2) Retira a validação do bloco restante mantendo a proporção global.
-        validation_relative = validation_size / (1.0 - test_size)
-        X_train, X_val, y_train, y_val = train_test_split(
+        # 2) Retira a validação do bloco
+        # restante mantendo a proporção global.
+        validation_relative = (
+            validation_size
+            / (
+                1.0
+                - test_size
+            )
+        )
+
+        (
+            X_train,
+            X_val,
+            y_train,
+            y_val,
+        ) = train_test_split(
             X_temp,
             y_temp,
-            test_size=validation_relative,
+            test_size=(
+                validation_relative
+            ),
             random_state=random_state,
             stratify=y_temp,
         )
 
         logger.info(
-            "  Split: treino=%d | validação=%d | teste=%d",
+            "  Split: treino=%d | "
+            "validação=%d | teste=%d",
             len(X_train),
             len(X_val),
             len(X_test),
         )
 
-        intersecoes = self.auditar_isolamento_triplo(
-            X_train,
-            y_train,
-            X_val,
-            y_val,
-            X_test,
-            y_test,
+        intersecoes = (
+            self
+            .auditar_isolamento_triplo(
+                X_train,
+                y_train,
+                X_val,
+                y_val,
+                X_test,
+                y_test,
+            )
         )
 
-        logger.info("  Normalização:")
-        X_train_scaled = self.scaler.fit_transform(X_train)
-        X_val_scaled = self.scaler.transform(X_val)
-        X_test_scaled = self.scaler.transform(X_test)
+        logger.info(
+            "  Normalização:"
+        )
 
-        train_mean = float(np.abs(X_train_scaled.mean(axis=0)).mean())
-        val_mean = float(np.abs(X_val_scaled.mean(axis=0)).mean())
-        test_mean = float(np.abs(X_test_scaled.mean(axis=0)).mean())
+        if fit_scaler:
+            X_train_scaled = (
+                self.scaler
+                .fit_transform(
+                    X_train
+                )
+            )
 
-        logger.info("    Média abs. treino:    %.6f", train_mean)
-        logger.info("    Média abs. validação: %.6f", val_mean)
-        logger.info("    Média abs. teste:     %.6f", test_mean)
+        else:
+            if not hasattr(
+                self.scaler,
+                "mean_",
+            ):
+                raise RuntimeError(
+                    "fit_scaler=False exige "
+                    "um scaler previamente ajustado"
+                )
+
+            expected_features = len(
+                self.scaler.mean_
+            )
+
+            if (
+                X_train.shape[1]
+                != expected_features
+            ):
+                raise ValueError(
+                    "Número de features "
+                    "incompatível com o scaler "
+                    "persistido: "
+                    f"{X_train.shape[1]} != "
+                    f"{expected_features}"
+                )
+
+            X_train_scaled = (
+                self.scaler
+                .transform(
+                    X_train
+                )
+            )
+
+        X_val_scaled = (
+            self.scaler
+            .transform(
+                X_val
+            )
+        )
+
+        X_test_scaled = (
+            self.scaler
+            .transform(
+                X_test
+            )
+        )
+
+        train_mean = float(
+            np.abs(
+                X_train_scaled
+                .mean(
+                    axis=0
+                )
+            )
+            .mean()
+        )
+
+        val_mean = float(
+            np.abs(
+                X_val_scaled
+                .mean(
+                    axis=0
+                )
+            )
+            .mean()
+        )
+
+        test_mean = float(
+            np.abs(
+                X_test_scaled
+                .mean(
+                    axis=0
+                )
+            )
+            .mean()
+        )
+
+        logger.info(
+            "    Média abs. treino:    %.6f",
+            train_mean,
+        )
+
+        logger.info(
+            "    Média abs. validação: %.6f",
+            val_mean,
+        )
+
+        logger.info(
+            "    Média abs. teste:     %.6f",
+            test_mean,
+        )
 
         self.audit_info = {
-            "duplicatas_detectadas": n_duplicates,
-            "duplicatas_removidas": n_removed,
-            "amostras_pos_deduplicacao": int(len(X)),
+            "duplicatas_detectadas": (
+                n_duplicates
+            ),
+
+            "duplicatas_removidas": (
+                n_removed
+            ),
+
+            "amostras_pos_deduplicacao": int(
+                len(X)
+            ),
+
             "split": {
-                "treino": int(len(X_train)),
-                "validacao": int(len(X_val)),
-                "teste": int(len(X_test)),
+                "treino": int(
+                    len(X_train)
+                ),
+
+                "validacao": int(
+                    len(X_val)
+                ),
+
+                "teste": int(
+                    len(X_test)
+                ),
             },
-            "intersecoes": intersecoes,
+
+            "intersecoes": (
+                intersecoes
+            ),
+
             "media_abs_normalizada": {
                 "treino": train_mean,
                 "validacao": val_mean,
                 "teste": test_mean,
             },
-            "random_state": int(random_state),
+
+            "random_state": int(
+                random_state
+            ),
+
+            "scaler_fit_nesta_execucao": (
+                bool(
+                    fit_scaler
+                )
+            ),
         }
 
         return (
-            X_train_scaled.astype(np.float32),
-            X_val_scaled.astype(np.float32),
-            X_test_scaled.astype(np.float32),
-            y_train.astype(np.float32),
-            y_val.astype(np.float32),
-            y_test.astype(np.float32),
+            X_train_scaled.astype(
+                np.float32
+            ),
+
+            X_val_scaled.astype(
+                np.float32
+            ),
+
+            X_test_scaled.astype(
+                np.float32
+            ),
+
+            y_train.astype(
+                np.float32
+            ),
+
+            y_val.astype(
+                np.float32
+            ),
+
+            y_test.astype(
+                np.float32
+            ),
         )
 
-    def salvar(self, path: str | Path) -> None:
-        """Salva scaler, encoder, nomes das features e auditoria."""
-        path = Path(path)
-        path.mkdir(parents=True, exist_ok=True)
+    def salvar(
+        self,
+        path: str | Path,
+    ) -> None:
+        """
+        Salva scaler, encoder, nomes das
+        features e auditoria.
+        """
 
-        with open(path / "scaler.pkl", "wb") as f:
-            pickle.dump(self.scaler, f)
+        path = Path(
+            path
+        )
 
-        with open(path / "label_encoder.pkl", "wb") as f:
-            pickle.dump(self.label_encoder, f)
+        path.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
 
-        with open(path / "feature_names.pkl", "wb") as f:
-            pickle.dump(self.feature_names, f)
+        with open(
+            path / "scaler.pkl",
+            "wb",
+        ) as file:
+            pickle.dump(
+                self.scaler,
+                file,
+            )
 
-        with open(path / "audit_info.pkl", "wb") as f:
-            pickle.dump(self.audit_info, f)
+        with open(
+            path
+            / "label_encoder.pkl",
+            "wb",
+        ) as file:
+            pickle.dump(
+                self.label_encoder,
+                file,
+            )
 
-        logger.info("  Preprocessador: OK")
-        logger.debug("Preprocessador salvo em %s", path)
+        with open(
+            path
+            / "feature_names.pkl",
+            "wb",
+        ) as file:
+            pickle.dump(
+                self.feature_names,
+                file,
+            )
+
+        with open(
+            path
+            / "audit_info.pkl",
+            "wb",
+        ) as file:
+            pickle.dump(
+                self.audit_info,
+                file,
+            )
+
+        logger.info(
+            "  Preprocessador: OK"
+        )
+
+        logger.debug(
+            "Preprocessador salvo em %s",
+            path,
+        )
 
     @classmethod
     def carregar(
         cls,
         path: str | Path,
     ) -> "Preprocessador":
-        """Carrega scaler, encoder e nomes das features."""
-        path = Path(path)
+        """
+        Carrega scaler, encoder e nomes
+        das features.
+        """
+
+        path = Path(
+            path
+        )
+
         obj = cls()
 
-        with open(path / "scaler.pkl", "rb") as f:
-            obj.scaler = pickle.load(f)
+        with open(
+            path / "scaler.pkl",
+            "rb",
+        ) as file:
+            obj.scaler = pickle.load(
+                file
+            )
 
-        with open(path / "label_encoder.pkl", "rb") as f:
-            obj.label_encoder = pickle.load(f)
+        with open(
+            path
+            / "label_encoder.pkl",
+            "rb",
+        ) as file:
+            obj.label_encoder = (
+                pickle.load(
+                    file
+                )
+            )
 
-        with open(path / "feature_names.pkl", "rb") as f:
-            obj.feature_names = pickle.load(f)
+        with open(
+            path
+            / "feature_names.pkl",
+            "rb",
+        ) as file:
+            obj.feature_names = (
+                pickle.load(
+                    file
+                )
+            )
 
-        audit_path = path / "audit_info.pkl"
+        audit_path = (
+            path
+            / "audit_info.pkl"
+        )
+
         if audit_path.exists():
-            with open(audit_path, "rb") as f:
-                obj.audit_info = pickle.load(f)
+            with open(
+                audit_path,
+                "rb",
+            ) as file:
+                obj.audit_info = (
+                    pickle.load(
+                        file
+                    )
+                )
 
         return obj
 
@@ -426,12 +843,13 @@ class Preprocessador:
         X: np.ndarray,
     ) -> np.ndarray:
         """
-        Normaliza novas amostras utilizando exclusivamente
-        o scaler ajustado durante o treinamento.
+        Normaliza novas amostras utilizando
+        exclusivamente o scaler ajustado durante
+        o treinamento.
 
-        Usado, por exemplo, para converter flow features
-        reconstruídas da rede para o espaço esperado pelo
-        Defensor.
+        Usado, por exemplo, para converter flow
+        features reconstruídas da rede para o
+        espaço esperado pelo Defensor.
         """
 
         X = np.asarray(
@@ -441,7 +859,8 @@ class Preprocessador:
 
         if X.ndim != 2:
             raise ValueError(
-                "X deve possuir shape [N, features]"
+                "X deve possuir "
+                "shape [N, features]"
             )
 
         if not hasattr(
@@ -470,7 +889,9 @@ class Preprocessador:
         if (
             self.feature_names
             and X.shape[1]
-            != len(self.feature_names)
+            != len(
+                self.feature_names
+            )
         ):
             raise ValueError(
                 "Número de features incompatível "
@@ -488,7 +909,9 @@ class Preprocessador:
 
         return (
             self.scaler
-            .transform(X)
+            .transform(
+                X
+            )
             .astype(
                 np.float32
             )
@@ -498,13 +921,38 @@ class Preprocessador:
         self,
         X_scaled: np.ndarray,
     ) -> np.ndarray:
-        """Converte dados normalizados de volta à escala original."""
-        X_scaled = np.asarray(X_scaled, dtype=np.float64)
+        """
+        Converte dados normalizados de volta
+        à escala original.
+        """
+
+        X_scaled = np.asarray(
+            X_scaled,
+            dtype=np.float64,
+        )
+
         if X_scaled.ndim != 2:
-            raise ValueError("X_scaled deve possuir shape [N, features]")
-        if X_scaled.shape[1] != len(self.scaler.mean_):
             raise ValueError(
-                "Número de features incompatível com o scaler: "
-                f"{X_scaled.shape[1]} != {len(self.scaler.mean_)}"
+                "X_scaled deve possuir "
+                "shape [N, features]"
             )
-        return self.scaler.inverse_transform(X_scaled)
+
+        if (
+            X_scaled.shape[1]
+            != len(
+                self.scaler.mean_
+            )
+        ):
+            raise ValueError(
+                "Número de features incompatível "
+                "com o scaler: "
+                f"{X_scaled.shape[1]} != "
+                f"{len(self.scaler.mean_)}"
+            )
+
+        return (
+            self.scaler
+            .inverse_transform(
+                X_scaled
+            )
+        )

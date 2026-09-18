@@ -216,6 +216,11 @@ class NetworkSettings:
         | None
     ) = None
 
+    preprocessor_source: (
+        str
+        | None
+    ) = None
+
     sample_count: int = 20
 
     packet_limit: (
@@ -229,6 +234,8 @@ class NetworkSettings:
     ) = None
 
     dry_run: bool = True
+
+    observe: bool = False
 
     def validate(
         self,
@@ -478,7 +485,7 @@ class ExperimentConfig:
         )
 
         # ---------------------------------
-        # Caminho de treinamento
+        # Modos
         # ---------------------------------
 
         trains = (
@@ -498,6 +505,10 @@ class ExperimentConfig:
                 .TRAIN_AND_SIMULATE,
             }
         )
+
+        # ---------------------------------
+        # Caminho de treinamento
+        # ---------------------------------
 
         if trains:
             self._require_representation_match(
@@ -569,6 +580,36 @@ class ExperimentConfig:
                 "exige network configurado"
             )
 
+        if (
+            self.mode
+            == ExperimentMode.SIMULATE
+        ):
+            assert (
+                self.network
+                is not None
+            )
+
+            if not (
+                self.network
+                .preprocessor_source
+            ):
+                raise ValueError(
+                    "SIMULATE exige "
+                    "network.preprocessor_source"
+                )
+
+            if not self.attacker.source:
+                raise ValueError(
+                    "SIMULATE exige checkpoint "
+                    "em attacker.source"
+                )
+
+            if not self.defender.source:
+                raise ValueError(
+                    "SIMULATE exige checkpoint "
+                    "em defender.source"
+                )
+
         if simulates:
             self._validate_network_components(
                 registry=registry,
@@ -626,8 +667,6 @@ class ExperimentConfig:
                 "não disponível"
             )
 
-        # NetworkSettings.validate()
-        # garantiu estes valores.
         assert (
             network.renderer
             is not None
@@ -747,16 +786,14 @@ class ExperimentConfig:
             ),
         )
 
-        # Capture é um observador da rede.
+        # O Capture observa a rede.
         #
         # Não existe:
         #
         #   backend.output -> capture.input
         #
-        # porque o backend não entrega seus
-        # resultados diretamente ao Capture.
-        # O Capture observa os pacotes que
-        # ocorreram no ambiente.
+        # porque o backend não entrega seu
+        # resultado diretamente ao Capture.
 
         # capture -> extractor
         self._require_representation_match(

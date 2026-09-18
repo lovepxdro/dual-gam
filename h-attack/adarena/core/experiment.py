@@ -20,6 +20,7 @@ from adarena.protocols.base import (
 
 from .config import (
     ExperimentConfig,
+    ExperimentMode,
 )
 
 from .registry import (
@@ -188,14 +189,71 @@ class ExperimentRunner:
                 dataset_data
             )
 
-            preprocessor = (
-                self
-                ._preprocessor_factory()
-            )
+            fit_scaler = True
 
-            preprocessor.configurar_dataset(
-                dataset_data
-            )
+            if (
+                self.config.mode
+                == ExperimentMode.SIMULATE
+            ):
+                network = (
+                    self.config.network
+                )
+
+                if (
+                    network is None
+                    or not network
+                    .preprocessor_source
+                ):
+                    raise RuntimeError(
+                        "SIMULATE sem "
+                        "preprocessor_source"
+                    )
+
+                from gan.preprocessing import (
+                    Preprocessador,
+                )
+
+                preprocessor = (
+                    Preprocessador
+                    .carregar(
+                        network
+                        .preprocessor_source
+                    )
+                )
+
+                expected_features = list(
+                    preprocessor
+                    .feature_names
+                )
+
+                dataset_features = list(
+                    dataset_data
+                    .schema
+                    .feature_names
+                )
+
+                if (
+                    expected_features
+                    != dataset_features
+                ):
+                    raise ValueError(
+                        "Schema do dataset não "
+                        "corresponde ao "
+                        "preprocessador utilizado "
+                        "no treinamento"
+                    )
+
+                fit_scaler = False
+
+            else:
+                preprocessor = (
+                    self
+                    ._preprocessor_factory()
+                )
+
+                preprocessor.configurar_dataset(
+                    dataset_data
+                )
 
             (
                 X_train,
@@ -226,6 +284,10 @@ class ExperimentRunner:
 
                     random_state=(
                         self.config.seed
+                    ),
+
+                    fit_scaler=(
+                        fit_scaler
                     ),
                 )
             )
@@ -322,7 +384,9 @@ class ExperimentRunner:
 
             log_handler.close()
 
-    def _load_dataset(self):
+    def _load_dataset(
+        self,
+    ):
         selection = (
             self
             .config
@@ -422,6 +486,93 @@ class ExperimentRunner:
             .attack_dataset
         )
 
+        network = (
+            self.config.network
+        )
+
+        network_snapshot = None
+
+        if network is not None:
+            network_snapshot = {
+                "renderer": (
+                    network
+                    .renderer
+                    .to_dict()
+                    if (
+                        network.renderer
+                        is not None
+                    )
+                    else None
+                ),
+
+                "network_backend": (
+                    network
+                    .network_backend
+                    .to_dict()
+                    if (
+                        network
+                        .network_backend
+                        is not None
+                    )
+                    else None
+                ),
+
+                "capture": (
+                    network
+                    .capture
+                    .to_dict()
+                    if (
+                        network.capture
+                        is not None
+                    )
+                    else None
+                ),
+
+                "extractor": (
+                    network
+                    .extractor
+                    .to_dict()
+                    if (
+                        network.extractor
+                        is not None
+                    )
+                    else None
+                ),
+
+                "preprocessor_source": (
+                    network
+                    .preprocessor_source
+                ),
+
+                "sample_count": (
+                    network.sample_count
+                ),
+
+                "packet_limit": (
+                    network.packet_limit
+                ),
+
+                "classification_threshold": (
+                    network
+                    .classification_threshold
+                ),
+
+                "effective_classification_threshold": (
+                    network.threshold(
+                        training
+                        .classification_threshold
+                    )
+                ),
+
+                "dry_run": (
+                    network.dry_run
+                ),
+
+                "observe": (
+                    network.observe
+                ),
+            }
+
         return {
             "run_id": run_id,
 
@@ -430,6 +581,13 @@ class ExperimentRunner:
                 .isoformat(
                     timespec="seconds"
                 )
+            ),
+
+            "mode": (
+                self
+                .config
+                .mode
+                .value
             ),
 
             "seed": (
@@ -497,7 +655,109 @@ class ExperimentRunner:
                     )
                     else None
                 ),
+
+                "renderer": (
+                    network
+                    .renderer
+                    .component_id
+                    if (
+                        network is not None
+                        and network.renderer
+                        is not None
+                    )
+                    else None
+                ),
+
+                "network_backend": (
+                    network
+                    .network_backend
+                    .component_id
+                    if (
+                        network is not None
+                        and network
+                        .network_backend
+                        is not None
+                    )
+                    else None
+                ),
+
+                "capture": (
+                    network
+                    .capture
+                    .component_id
+                    if (
+                        network is not None
+                        and network.capture
+                        is not None
+                    )
+                    else None
+                ),
+
+                "extractor": (
+                    network
+                    .extractor
+                    .component_id
+                    if (
+                        network is not None
+                        and network.extractor
+                        is not None
+                    )
+                    else None
+                ),
             },
+
+            "component_config": {
+                "attacker": (
+                    self
+                    .config
+                    .attacker
+                    .to_dict()
+                ),
+
+                "defender": (
+                    self
+                    .config
+                    .defender
+                    .to_dict()
+                ),
+
+                "attack_dataset": (
+                    dataset_selection
+                    .to_dict()
+                ),
+
+                "benign_dataset": (
+                    self
+                    .config
+                    .benign_dataset
+                    .to_dict()
+                    if (
+                        self
+                        .config
+                        .benign_dataset
+                        is not None
+                    )
+                    else None
+                ),
+
+                "protocol": (
+                    self
+                    .config
+                    .protocol
+                    .to_dict()
+                    if (
+                        self
+                        .config
+                        .protocol
+                        is not None
+                    )
+                    else None
+                ),
+            },
+
+            "network": (
+                network_snapshot
+            ),
 
             "dados": {
                 "input_dim": (

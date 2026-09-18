@@ -7,6 +7,7 @@ from adarena.builtin import (
     CICIDS2017_RENDERER_ID,
     PERTURBATION_ATTACKER_ID,
     SCAPY_NETWORK_BACKEND_ID,
+    NETWORK_SIMULATION_PROTOCOL_ID,
     create_default_registry,
 )
 
@@ -140,7 +141,8 @@ def test_registry_builtin_expoe_componentes_atuais():
         for spec
         in protocols
     ] == [
-        ADVERSARIAL_PROTOCOL_ID
+        ADVERSARIAL_PROTOCOL_ID,
+        NETWORK_SIMULATION_PROTOCOL_ID,
     ]
 
     assert [

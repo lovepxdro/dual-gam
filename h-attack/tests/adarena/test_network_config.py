@@ -169,6 +169,10 @@ def _network():
             "extractor"
         ),
 
+        preprocessor_source=(
+            "models/run/preprocessador"
+        ),
+
         sample_count=20,
 
         packet_limit=100,
@@ -185,11 +189,21 @@ def _config(
 
     return ExperimentConfig(
         attacker=ComponentSelection(
-            "attacker"
+            "attacker",
+
+            source=(
+                "models/run/"
+                "attacker.pth"
+            ),
         ),
 
         defender=ComponentSelection(
-            "defender"
+            "defender",
+
+            source=(
+                "models/run/"
+                "defender.pth"
+            ),
         ),
 
         attack_dataset=(
@@ -236,9 +250,6 @@ def test_simulate_rejeita_representacao_incompativel():
 
     registry = _registry()
 
-    # Renderer passa a esperar algo
-    # diferente da saída FLOW_FEATURES
-    # do atacante.
     registry.specs[
         "renderer"
     ] = _spec(

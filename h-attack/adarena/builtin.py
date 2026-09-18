@@ -27,12 +27,12 @@ CICIDS2017_DATASET_ID = (
     "adarena.cicids2017"
 )
 
-SCAPY_NETWORK_BACKEND_ID = (
-    "adarena.scapy_backend"
-)
-
 ADVERSARIAL_PROTOCOL_ID = (
     "adarena.adversarial_training"
+)
+
+NETWORK_SIMULATION_PROTOCOL_ID = (
+    "adarena.network_simulation"
 )
 
 CICIDS2017_RENDERER_ID = (
@@ -96,45 +96,6 @@ def _create_cicids2017_dataset(
         ),
     )
 
-def _create_cicids2017_renderer(
-    preprocessor,
-    target_ip: str,
-    target_port: int = 80,
-    consistency_tolerance: float = 0.75,
-    **_,
-):
-    from .network.adapters import (
-        TranslatorRenderer,
-    )
-
-    return TranslatorRenderer(
-        preprocessor=preprocessor,
-        target_ip=target_ip,
-        target_port=target_port,
-        consistency_tolerance=(
-            consistency_tolerance
-        ),
-    )
-
-
-def _create_scapy_network_backend(
-    iface=None,
-    dry_run: bool = False,
-    require_private_target: bool = True,
-    **_,
-):
-    from .network.adapters import (
-        SenderNetworkBackend,
-    )
-
-    return SenderNetworkBackend(
-        iface=iface,
-        dry_run=dry_run,
-        require_private_target=(
-            require_private_target
-        ),
-    )
-
 
 def _create_adversarial_protocol(
     **_,
@@ -154,9 +115,95 @@ def _create_adversarial_protocol(
     )
 
 
+def _create_network_simulation_protocol(
+    **_,
+):
+    # Import tardio para manter o registro
+    # independente das dependências usadas
+    # durante a execução do protocolo.
+    from .protocols.network_simulation import (
+        NetworkSimulationProtocol,
+    )
+
+    return (
+        NetworkSimulationProtocol()
+    )
+
+
+def _create_cicids2017_renderer(
+    preprocessor,
+    target_ip: str,
+    target_port: int = 80,
+    consistency_tolerance: float = 0.75,
+    **_,
+):
+    from .network.adapters import (
+        TranslatorRenderer,
+    )
+
+    return TranslatorRenderer(
+        preprocessor=preprocessor,
+        target_ip=target_ip,
+        target_port=target_port,
+
+        consistency_tolerance=(
+            consistency_tolerance
+        ),
+    )
+
+
+def _create_scapy_network_backend(
+    iface=None,
+    dry_run: bool = False,
+    require_private_target: bool = True,
+    **_,
+):
+    from .network.adapters import (
+        SenderNetworkBackend,
+    )
+
+    return SenderNetworkBackend(
+        iface=iface,
+        dry_run=dry_run,
+
+        require_private_target=(
+            require_private_target
+        ),
+    )
+
+
+def _create_scapy_capture(
+    iface=None,
+    bpf_filter=None,
+    **_,
+):
+    from .network.capture import (
+        ScapyPacketCapture,
+    )
+
+    return ScapyPacketCapture(
+        iface=iface,
+        bpf_filter=bpf_filter,
+    )
+
+
+def _create_basic_flow_extractor(
+    **_,
+):
+    from .network.extractor import (
+        BasicFlowExtractor,
+    )
+
+    return BasicFlowExtractor()
+
+
 def register_builtin_components(
     registry: ComponentRegistry,
 ) -> ComponentRegistry:
+
+    # ---------------------------------
+    # Modelos
+    # ---------------------------------
 
     registry.register(
         ComponentSpec(
@@ -243,6 +290,10 @@ def register_builtin_components(
         _create_binary_mlp_defender,
     )
 
+    # ---------------------------------
+    # Datasets
+    # ---------------------------------
+
     registry.register(
         ComponentSpec(
             component_id=(
@@ -282,6 +333,10 @@ def register_builtin_components(
         _create_cicids2017_dataset,
     )
 
+    # ---------------------------------
+    # Protocolos experimentais
+    # ---------------------------------
+
     registry.register(
         ComponentSpec(
             component_id=(
@@ -318,6 +373,46 @@ def register_builtin_components(
     registry.register(
         ComponentSpec(
             component_id=(
+                NETWORK_SIMULATION_PROTOCOL_ID
+            ),
+
+            kind=(
+                ComponentKind
+                .EXPERIMENT_PROTOCOL
+            ),
+
+            name=(
+                "Network Simulation Protocol"
+            ),
+
+            version="2.0",
+
+            description=(
+                "Protocolo experimental que "
+                "avalia amostras adversariais, "
+                "realiza tradução para a camada "
+                "de rede e executa o backend "
+                "em dry-run."
+            ),
+
+            tags=(
+                "builtin",
+                "simulation",
+                "network",
+                "dry-run",
+            ),
+        ),
+
+        _create_network_simulation_protocol,
+    )
+
+    # ---------------------------------
+    # Renderer
+    # ---------------------------------
+
+    registry.register(
+        ComponentSpec(
+            component_id=(
                 CICIDS2017_RENDERER_ID
             ),
 
@@ -332,9 +427,11 @@ def register_builtin_components(
             version="2.0",
 
             description=(
-                "Converte flow features produzidas "
-                "pelos modelos atuais em parâmetros "
-                "materializáveis pelo backend de rede."
+                "Converte flow features "
+                "produzidas pelos modelos "
+                "atuais em parâmetros "
+                "materializáveis pelo backend "
+                "de rede."
             ),
 
             input_representation=(
@@ -359,6 +456,9 @@ def register_builtin_components(
         _create_cicids2017_renderer,
     )
 
+    # ---------------------------------
+    # Network backend
+    # ---------------------------------
 
     registry.register(
         ComponentSpec(
@@ -379,7 +479,8 @@ def register_builtin_components(
 
             description=(
                 "Backend de execução utilizado "
-                "no ambiente experimental isolado."
+                "no ambiente experimental "
+                "isolado."
             ),
 
             input_representation=(
@@ -402,6 +503,10 @@ def register_builtin_components(
 
         _create_scapy_network_backend,
     )
+
+    # ---------------------------------
+    # Capture
+    # ---------------------------------
 
     registry.register(
         ComponentSpec(
@@ -440,6 +545,9 @@ def register_builtin_components(
         _create_scapy_capture,
     )
 
+    # ---------------------------------
+    # Extractor
+    # ---------------------------------
 
     registry.register(
         ComponentSpec(
@@ -484,31 +592,6 @@ def register_builtin_components(
     )
 
     return registry
-
-
-def _create_scapy_capture(
-    iface=None,
-    bpf_filter=None,
-    **_,
-):
-    from .network.capture import (
-        ScapyPacketCapture,
-    )
-
-    return ScapyPacketCapture(
-        iface=iface,
-        bpf_filter=bpf_filter,
-    )
-
-
-def _create_basic_flow_extractor(
-    **_,
-):
-    from .network.extractor import (
-        BasicFlowExtractor,
-    )
-
-    return BasicFlowExtractor()
 
 
 def create_default_registry() -> (
