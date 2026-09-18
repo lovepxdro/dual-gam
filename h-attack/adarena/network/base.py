@@ -50,6 +50,14 @@ class NetworkBackend(ABC):
 
 @dataclass(frozen=True, slots=True)
 class CapturedPacket:
+    """
+    Representação neutra de um pacote observado.
+
+    O Core da ADArena não depende diretamente
+    de Scapy. Backends de captura são responsáveis
+    por converter seus pacotes para esta estrutura.
+    """
+
     timestamp: float
 
     src_ip: str
@@ -77,6 +85,11 @@ class CapturedPacket:
 
 @dataclass(slots=True)
 class CaptureBatch:
+    """
+    Conjunto de pacotes produzidos por uma
+    sessão de captura.
+    """
+
     packets: list[CapturedPacket]
 
     started_at: float
@@ -129,7 +142,10 @@ class FlowFeatureBatch:
         default_factory=dict
     )
 
-    def __post_init__(self) -> None:
+    def __post_init__(
+        self,
+    ) -> None:
+
         self.X = np.asarray(
             self.X,
             dtype=np.float32,
@@ -143,7 +159,9 @@ class FlowFeatureBatch:
 
         if (
             self.X.shape[1]
-            != len(self.feature_names)
+            != len(
+                self.feature_names
+            )
         ):
             raise ValueError(
                 "Quantidade de colunas "
@@ -152,7 +170,9 @@ class FlowFeatureBatch:
 
         if (
             self.X.shape[0]
-            != len(self.flow_ids)
+            != len(
+                self.flow_ids
+            )
         ):
             raise ValueError(
                 "Quantidade de fluxos "
@@ -160,7 +180,10 @@ class FlowFeatureBatch:
             )
 
     @property
-    def ready_for_model(self) -> bool:
+    def ready_for_model(
+        self,
+    ) -> bool:
+
         return bool(
             not self.unsupported_features
             and np.isfinite(
@@ -170,6 +193,64 @@ class FlowFeatureBatch:
 
 
 class Capture(ABC):
+    """
+    Interface de captura de tráfego.
+
+    Existem dois modos de uso.
+
+    Captura síncrona:
+
+        batch = capture.capture(
+            duration=5.0
+        )
+
+    Captura concorrente:
+
+        capture.start()
+
+        try:
+            backend.execute(...)
+        finally:
+            batch = capture.stop()
+
+    start()/stop() possuem implementação padrão
+    que sinaliza ausência de suporte, preservando
+    compatibilidade com implementações antigas que
+    oferecem somente capture().
+    """
+
+    def start(
+        self,
+        *,
+        packet_limit: int | None = None,
+    ) -> None:
+        """
+        Inicia uma sessão de captura sem bloquear.
+
+        Implementações que oferecem captura
+        concorrente devem sobrescrever este método.
+        """
+
+        raise NotImplementedError(
+            f"{type(self).__name__} "
+            "não suporta captura concorrente"
+        )
+
+    def stop(
+        self,
+    ) -> CaptureBatch:
+        """
+        Encerra uma sessão iniciada por start()
+        e retorna os pacotes observados.
+
+        Implementações que oferecem captura
+        concorrente devem sobrescrever este método.
+        """
+
+        raise NotImplementedError(
+            f"{type(self).__name__} "
+            "não suporta captura concorrente"
+        )
 
     @abstractmethod
     def capture(
@@ -178,35 +259,66 @@ class Capture(ABC):
         duration: float,
         packet_limit: int | None = None,
     ) -> CaptureBatch:
+        """
+        Executa uma captura síncrona com duração
+        determinada.
+        """
+
         raise NotImplementedError
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(
+    frozen=True,
+    slots=True,
+)
 class FeatureSupportReport:
-    requested_features: tuple[str, ...]
-    supported_features: tuple[str, ...]
-    unsupported_features: tuple[str, ...]
+    requested_features: tuple[
+        str,
+        ...
+    ]
+
+    supported_features: tuple[
+        str,
+        ...
+    ]
+
+    unsupported_features: tuple[
+        str,
+        ...
+    ]
 
     @property
-    def total(self) -> int:
+    def total(
+        self,
+    ) -> int:
+
         return len(
             self.requested_features
         )
 
     @property
-    def supported_count(self) -> int:
+    def supported_count(
+        self,
+    ) -> int:
+
         return len(
             self.supported_features
         )
 
     @property
-    def unsupported_count(self) -> int:
+    def unsupported_count(
+        self,
+    ) -> int:
+
         return len(
             self.unsupported_features
         )
 
     @property
-    def coverage(self) -> float:
+    def coverage(
+        self,
+    ) -> float:
+
         if self.total == 0:
             return 1.0
 
@@ -216,7 +328,10 @@ class FeatureSupportReport:
         )
 
     @property
-    def complete(self) -> bool:
+    def complete(
+        self,
+    ) -> bool:
+
         return (
             self.unsupported_count
             == 0

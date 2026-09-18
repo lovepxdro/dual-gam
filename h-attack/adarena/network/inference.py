@@ -7,14 +7,16 @@ from abc import (
 
 from dataclasses import dataclass
 
-from typing import Sequence
+from typing import Any, Sequence
 
 import numpy as np
 
 from .base import (
+    Capture,
     CaptureBatch,
     FlowExtractor,
     FlowFeatureBatch,
+    NetworkBackend,
 )
 
 
@@ -404,6 +406,43 @@ class NetworkInferenceResult:
             ).sum()
         )
 
+@dataclass(slots=True)
+class NetworkObservationResult:
+    """
+    Resultado completo de uma execução observada.
+
+    Une três etapas sem misturar suas
+    responsabilidades:
+
+        NetworkBackend
+            ↓
+        Capture
+            ↓
+        NetworkInferencePipeline
+    """
+
+    backend_results: list[Any]
+
+    capture: CaptureBatch
+
+    inference: NetworkInferenceResult
+
+    @property
+    def n_backend_results(
+        self,
+    ) -> int:
+        return len(
+            self.backend_results
+        )
+
+    @property
+    def n_captured_packets(
+        self,
+    ) -> int:
+        return len(
+            self.capture
+        )
+
 
 class NetworkInferencePipeline:
     """
@@ -593,4 +632,101 @@ class NetworkInferencePipeline:
             ),
 
             threshold=self.threshold,
+        )
+
+class NetworkObservationPipeline:
+    """
+    Orquestra execução de rede + captura +
+    inferência defensiva.
+
+    Não conhece Attacker, Renderer ou dataset.
+
+    Recebe payloads já renderizados e executa:
+
+        Capture.start()
+            ↓
+        NetworkBackend.execute_many()
+            ↓
+        Capture.stop()
+            ↓
+        NetworkInferencePipeline.infer()
+    """
+
+    def __init__(
+        self,
+        *,
+        capture: Capture,
+        backend: NetworkBackend,
+        inference: NetworkInferencePipeline,
+    ) -> None:
+
+        self.capture = capture
+        self.backend = backend
+        self.inference = inference
+
+    def execute(
+        self,
+        payload: Any,
+        *,
+        packet_limit: int | None = None,
+    ) -> NetworkObservationResult:
+        """
+        Executa e observa um único payload.
+        """
+
+        return self.execute_many(
+            [payload],
+            packet_limit=packet_limit,
+        )
+
+    def execute_many(
+        self,
+        payloads: list[Any],
+        *,
+        packet_limit: int | None = None,
+    ) -> NetworkObservationResult:
+        """
+        Mantém a captura ativa durante toda a
+        execução do backend.
+
+        stop() é chamado mesmo se o backend falhar,
+        evitando deixar uma captura em background.
+        """
+
+        self.capture.start(
+            packet_limit=packet_limit
+        )
+
+        capture_batch = None
+
+        try:
+            backend_results = (
+                self.backend.execute_many(
+                    payloads
+                )
+            )
+
+        finally:
+            capture_batch = (
+                self.capture.stop()
+            )
+
+        inference_result = (
+            self.inference.infer(
+                capture_batch
+            )
+        )
+
+        return NetworkObservationResult(
+            backend_results=(
+                backend_results
+            ),
+
+            capture=(
+                capture_batch
+            ),
+
+            inference=(
+                inference_result
+            ),
         )

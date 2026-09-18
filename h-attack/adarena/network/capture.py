@@ -23,6 +23,16 @@ class ScapyPacketCapture(Capture):
     Converte pacotes Scapy imediatamente para
     CapturedPacket, evitando que o restante do Core
     dependa de Scapy.
+
+    Suporta dois modos:
+
+    1. síncrono:
+       capture(duration=...)
+
+    2. concorrente:
+       start()
+       ...
+       stop()
     """
 
     def __init__(
@@ -35,12 +45,239 @@ class ScapyPacketCapture(Capture):
         self.iface = iface
         self.bpf_filter = bpf_filter
 
+        self._sniffer = None
+
+        self._started_at: (
+            float | None
+        ) = None
+
+        self._packet_limit: (
+            int | None
+        ) = None
+
+    @property
+    def running(
+        self,
+    ) -> bool:
+
+        if self._sniffer is None:
+            return False
+
+        return bool(
+            getattr(
+                self._sniffer,
+                "running",
+                False,
+            )
+        )
+
+    def start(
+        self,
+        *,
+        packet_limit: int | None = None,
+    ) -> None:
+        """
+        Inicia captura em background.
+
+        Não bloqueia a execução do chamador.
+        """
+
+        if self._sniffer is not None:
+            raise RuntimeError(
+                "Já existe uma sessão "
+                "de captura ativa"
+            )
+
+        if (
+            packet_limit is not None
+            and packet_limit <= 0
+        ):
+            raise ValueError(
+                "packet_limit deve ser > 0"
+            )
+
+        from scapy.all import (
+            AsyncSniffer,
+        )
+
+        self._packet_limit = (
+            packet_limit
+        )
+
+        self._started_at = (
+            time.time()
+        )
+
+        self._sniffer = AsyncSniffer(
+            iface=self.iface,
+
+            filter=self.bpf_filter,
+
+            count=(
+                packet_limit
+                if packet_limit
+                is not None
+                else 0
+            ),
+
+            store=True,
+        )
+
+        try:
+            self._sniffer.start()
+
+        except Exception:
+            self._sniffer = None
+            self._started_at = None
+            self._packet_limit = None
+
+            raise
+
+        logger.info(
+            "Captura iniciada "
+            "em background "
+            "(iface=%s, limit=%s)",
+            self.iface,
+            packet_limit,
+        )
+
+    def stop(
+        self,
+    ) -> CaptureBatch:
+        """
+        Encerra a sessão concorrente e retorna
+        todos os pacotes observados.
+        """
+
+        if self._sniffer is None:
+            raise RuntimeError(
+                "Nenhuma sessão de captura "
+                "foi iniciada"
+            )
+
+        sniffer = self._sniffer
+
+        started_at = (
+            self._started_at
+            if self._started_at
+            is not None
+            else time.time()
+        )
+
+        packet_limit = (
+            self._packet_limit
+        )
+
+        try:
+            # Se o limite de pacotes já tiver sido
+            # atingido, o AsyncSniffer pode já ter
+            # terminado sozinho.
+            if getattr(
+                sniffer,
+                "running",
+                False,
+            ):
+                packets = (
+                    sniffer.stop()
+                )
+
+            else:
+                packets = getattr(
+                    sniffer,
+                    "results",
+                    None,
+                )
+
+            if packets is None:
+                packets = []
+
+            ended_at = (
+                time.time()
+            )
+
+            records = []
+
+            for packet in packets:
+
+                record = (
+                    self._to_record(
+                        packet
+                    )
+                )
+
+                if record is not None:
+                    records.append(
+                        record
+                    )
+
+            logger.info(
+                "Captura concluída: "
+                "%d pacotes IP em %.3fs",
+                len(records),
+                ended_at - started_at,
+            )
+
+            return CaptureBatch(
+                packets=records,
+
+                started_at=(
+                    started_at
+                ),
+
+                ended_at=(
+                    ended_at
+                ),
+
+                interface=(
+                    self.iface
+                ),
+
+                metadata={
+                    "backend": (
+                        "scapy"
+                    ),
+
+                    "mode": (
+                        "async"
+                    ),
+
+                    "bpf_filter": (
+                        self.bpf_filter
+                    ),
+
+                    "packet_limit": (
+                        packet_limit
+                    ),
+
+                    "captured_raw": (
+                        len(
+                            packets
+                        )
+                    ),
+                },
+            )
+
+        finally:
+            # A sessão sempre é descartada depois
+            # de stop(), mesmo se a conversão de
+            # algum pacote falhar.
+            self._sniffer = None
+            self._started_at = None
+            self._packet_limit = None
+
     def capture(
         self,
         *,
         duration: float,
         packet_limit: int | None = None,
     ) -> CaptureBatch:
+        """
+        Captura síncrona de conveniência.
+
+        Internamente utiliza start()/stop(),
+        garantindo que os dois modos compartilhem
+        a mesma implementação.
+        """
 
         if duration <= 0:
             raise ValueError(
@@ -55,66 +292,61 @@ class ScapyPacketCapture(Capture):
                 "packet_limit deve ser > 0"
             )
 
-        from scapy.all import sniff
-
-        started_at = time.time()
-
-        packets = sniff(
-            iface=self.iface,
-
-            filter=self.bpf_filter,
-
-            timeout=duration,
-
-            count=(
+        self.start(
+            packet_limit=(
                 packet_limit
-                if packet_limit
-                is not None
-                else 0
-            ),
-
-            store=True,
+            )
         )
 
-        ended_at = time.time()
+        deadline = (
+            time.monotonic()
+            + duration
+        )
 
-        records = []
+        try:
+            while (
+                time.monotonic()
+                < deadline
+            ):
 
-        for packet in packets:
-            record = self._to_record(
-                packet
-            )
+                # Se count foi atingido,
+                # AsyncSniffer encerra sozinho.
+                if not self.running:
+                    break
 
-            if record is not None:
-                records.append(
-                    record
+                remaining = (
+                    deadline
+                    - time.monotonic()
                 )
 
-        logger.info(
-            "Captura concluída: "
-            "%d pacotes IP em %.3fs",
-            len(records),
-            ended_at - started_at,
-        )
+                time.sleep(
+                    min(
+                        0.05,
+                        max(
+                            remaining,
+                            0.0,
+                        ),
+                    )
+                )
 
-        return CaptureBatch(
-            packets=records,
+            return self.stop()
 
-            started_at=started_at,
-            ended_at=ended_at,
+        except Exception:
+            # Se alguma exceção acontecer enquanto
+            # aguardamos, tentamos encerrar a captura
+            # para não deixar thread pendurada.
+            if self._sniffer is not None:
 
-            interface=self.iface,
+                try:
+                    self.stop()
 
-            metadata={
-                "backend": "scapy",
-                "bpf_filter": (
-                    self.bpf_filter
-                ),
-                "captured_raw": (
-                    len(packets)
-                ),
-            },
-        )
+                except Exception:
+                    logger.exception(
+                        "Falha ao encerrar "
+                        "captura após erro"
+                    )
+
+            raise
 
     @staticmethod
     def _to_record(
@@ -139,10 +371,14 @@ class ScapyPacketCapture(Capture):
 
         payload_length = 0
         header_length = 0
+
         tcp_window = None
 
         if TCP in packet:
-            transport = packet[TCP]
+
+            transport = (
+                packet[TCP]
+            )
 
             protocol = "TCP"
 
@@ -170,16 +406,21 @@ class ScapyPacketCapture(Capture):
 
             data_offset = (
                 transport.dataofs
-                if transport.dataofs is not None
+                if transport.dataofs
+                is not None
                 else 5
             )
 
             header_length = int(
-                data_offset * 4
+                data_offset
+                * 4
             )
 
         elif UDP in packet:
-            transport = packet[UDP]
+
+            transport = (
+                packet[UDP]
+            )
 
             protocol = "UDP"
 
@@ -200,8 +441,11 @@ class ScapyPacketCapture(Capture):
             header_length = 8
 
         else:
+
             protocol = str(
-                int(ip.proto)
+                int(
+                    ip.proto
+                )
             )
 
         return CapturedPacket(
@@ -223,10 +467,14 @@ class ScapyPacketCapture(Capture):
             protocol=protocol,
 
             length=int(
-                len(packet)
+                len(
+                    packet
+                )
             ),
 
-            tcp_flags=tcp_flags,
+            tcp_flags=(
+                tcp_flags
+            ),
 
             payload_length=(
                 payload_length

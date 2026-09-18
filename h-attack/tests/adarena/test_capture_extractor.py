@@ -840,3 +840,231 @@ def test_extractor_reconstroi_bulk():
     assert vector[5] == pytest.approx(
         0.0
     )
+
+def test_scapy_capture_start_stop_com_async_sniffer_fake(
+    monkeypatch,
+):
+
+    packet = (
+        IP(
+            src="172.20.0.2",
+            dst="172.20.0.10",
+        )
+        /
+        TCP(
+            sport=50000,
+            dport=80,
+            flags="SA",
+            window=4096,
+        )
+        /
+        Raw(
+            load=b"abc"
+        )
+    )
+
+    packet.time = 10.5
+
+    class FakeAsyncSniffer:
+
+        def __init__(
+            self,
+            **kwargs,
+        ):
+            self.kwargs = kwargs
+            self.running = False
+            self.results = None
+
+        def start(
+            self,
+        ):
+            self.running = True
+
+        def stop(
+            self,
+        ):
+            self.running = False
+
+            self.results = [
+                packet
+            ]
+
+            return self.results
+
+    monkeypatch.setattr(
+        "scapy.all.AsyncSniffer",
+        FakeAsyncSniffer,
+    )
+
+    capture = ScapyPacketCapture(
+        iface="test0",
+        bpf_filter="tcp",
+    )
+
+    assert (
+        capture.running
+        is False
+    )
+
+    capture.start(
+        packet_limit=10
+    )
+
+    assert (
+        capture.running
+        is True
+    )
+
+    batch = capture.stop()
+
+    assert (
+        capture.running
+        is False
+    )
+
+    assert (
+        len(batch)
+        == 1
+    )
+
+    assert (
+        batch.interface
+        == "test0"
+    )
+
+    assert (
+        batch.metadata[
+            "backend"
+        ]
+        == "scapy"
+    )
+
+    assert (
+        batch.metadata[
+            "mode"
+        ]
+        == "async"
+    )
+
+    assert (
+        batch.metadata[
+            "bpf_filter"
+        ]
+        == "tcp"
+    )
+
+    assert (
+        batch.metadata[
+            "packet_limit"
+        ]
+        == 10
+    )
+
+    assert (
+        batch.metadata[
+            "captured_raw"
+        ]
+        == 1
+    )
+
+    record = (
+        batch.packets[0]
+    )
+
+    assert (
+        record.src_ip
+        == "172.20.0.2"
+    )
+
+    assert (
+        record.dst_ip
+        == "172.20.0.10"
+    )
+
+    assert (
+        record.payload_length
+        == 3
+    )
+
+    assert (
+        record.header_length
+        == 20
+    )
+
+    assert (
+        record.tcp_window
+        == 4096
+    )
+
+
+def test_scapy_capture_nao_permite_duplo_start(
+    monkeypatch,
+):
+
+    class FakeAsyncSniffer:
+
+        def __init__(
+            self,
+            **kwargs,
+        ):
+            self.running = False
+            self.results = []
+
+        def start(
+            self,
+        ):
+            self.running = True
+
+        def stop(
+            self,
+        ):
+            self.running = False
+
+            return []
+
+    monkeypatch.setattr(
+        "scapy.all.AsyncSniffer",
+        FakeAsyncSniffer,
+    )
+
+    capture = (
+        ScapyPacketCapture()
+    )
+
+    capture.start()
+
+    with pytest.raises(
+        RuntimeError,
+        match="Já existe",
+    ):
+        capture.start()
+
+    capture.stop()
+
+
+def test_scapy_capture_stop_sem_start_falha():
+
+    capture = (
+        ScapyPacketCapture()
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Nenhuma sessão",
+    ):
+        capture.stop()
+
+
+def test_scapy_capture_rejeita_packet_limit_invalido():
+
+    capture = (
+        ScapyPacketCapture()
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="packet_limit",
+    ):
+        capture.start(
+            packet_limit=0
+        )
