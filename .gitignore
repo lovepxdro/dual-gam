@@ -26,3 +26,7 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# Configurações locais / smoke tests
+configs/*.local.toml
+configs/*.smoke.toml

@@ -1,0 +1,35 @@
+# Exemplo de configuração do modo OBSERVE.
+#
+# Ajuste os caminhos e a interface antes de executar.
+
+mode = "observe"
+seed = 42
+device = "cpu"
+output_dir = "models"
+
+[defender]
+component_id = "adarena.binary_mlp_defender"
+source = "models/experiments/<run_id>/checkpoints/defensor_adaptativo_final.pth"
+
+[protocol]
+component_id = "adarena.network_observation"
+
+[network]
+preprocessor_source = "models/experiments/<run_id>/preprocessador"
+capture_duration = 5.0
+packet_limit = 500
+classification_threshold = 0.5
+dry_run = true
+
+[network.capture]
+component_id = "adarena.scapy_capture"
+
+[network.capture.params]
+iface = "SELECIONE_A_INTERFACE"
+bpf_filter = "ip"
+
+[network.extractor]
+component_id = "adarena.basic_flow_extractor"
+
+[metadata]
+purpose = "passive-network-observation"

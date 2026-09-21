@@ -1,6 +1,10 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "dual-gam"
-version = "2.0.0-dev"
+version = "2.4.0"
 description = "ADArena — Adaptive Defense Arena"
 requires-python = ">=3.11,<3.12"
 
@@ -13,12 +17,20 @@ dependencies = [
     "tqdm==4.66.4",
     "matplotlib==3.9.0",
     "torch==2.3.1",
+    "typer>=0.16,<1",
+    "rich>=14,<15",
 ]
+
+[project.scripts]
+adarena = "adarena.cli.app:main"
 
 [dependency-groups]
 dev = [
     "pytest==8.3.5",
 ]
+
+[tool.setuptools.packages.find]
+where = ["h-attack"]
 
 [tool.uv.sources]
 torch = { index = "pytorch-cpu" }

@@ -64,7 +64,7 @@ class DryRunRuleEnforcer(RuleEnforcer):
             result
         )
 
-        logger.info(
+        logger.debug(
             "Control action | "
             "flow=%s action=%s "
             "success=%s applied=%s dry_run=%s",

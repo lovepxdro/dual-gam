@@ -1,0 +1,23 @@
+# Exemplo de treinamento da ADArena.
+# Usa os defaults de [training] e [split] quando omitidos.
+
+mode = "train"
+seed = 42
+device = "cpu"
+output_dir = "models/train-cli"
+
+[attack_dataset]
+component_id = "adarena.cicids2017"
+source = "data/DDoS-Friday-no-metadata.parquet"
+
+[attacker]
+component_id = "adarena.perturbation_attacker"
+
+[defender]
+component_id = "adarena.binary_mlp_defender"
+
+[protocol]
+component_id = "adarena.adversarial_training"
+
+[metadata]
+purpose = "cli-training"

@@ -1,0 +1,48 @@
+# Exemplo de SIMULATE da ADArena.
+# Este modo permanece exclusivamente em dry-run na CLI.
+# Não há transmissão real de tráfego.
+
+mode = "simulate"
+seed = 42
+device = "cpu"
+output_dir = "models/simulate-cli"
+
+[attack_dataset]
+component_id = "adarena.cicids2017"
+source = "data/DDoS-Friday-no-metadata.parquet"
+
+[attacker]
+component_id = "adarena.perturbation_attacker"
+source = "models/experiments/run_20260908_135633_seed42/checkpoints/atacante_final.pth"
+
+[defender]
+component_id = "adarena.binary_mlp_defender"
+source = "models/experiments/run_20260908_135633_seed42/checkpoints/defensor_adaptativo_final.pth"
+
+[protocol]
+component_id = "adarena.network_simulation"
+
+[network]
+preprocessor_source = "models/experiments/run_20260908_135633_seed42/preprocessador"
+sample_count = 20
+dry_run = true
+observe = false
+
+[network.renderer]
+component_id = "adarena.cicids2017_renderer"
+
+[network.renderer.params]
+target_ip = "172.20.0.10"
+target_port = 80
+
+[network.network_backend]
+component_id = "adarena.scapy_backend"
+
+[network.capture]
+component_id = "adarena.scapy_capture"
+
+[network.extractor]
+component_id = "adarena.basic_flow_extractor"
+
+[metadata]
+purpose = "cli-dry-run-simulation"

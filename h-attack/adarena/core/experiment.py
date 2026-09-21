@@ -1092,7 +1092,7 @@ class ExperimentRunner:
         handler = logging.FileHandler(
             run_dir
             / "logs"
-            / "train.log",
+            / "run.log",
 
             encoding="utf-8",
         )
