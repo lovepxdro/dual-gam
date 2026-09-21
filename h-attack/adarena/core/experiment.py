@@ -146,18 +146,36 @@ class ExperimentRunner:
 
             logger.info(
                 "  Dataset: %s",
-                self
-                .config
-                .attack_dataset
-                .component_id,
+                (
+                    self
+                    .config
+                    .attack_dataset
+                    .component_id
+                    if (
+                        self
+                        .config
+                        .attack_dataset
+                        is not None
+                    )
+                    else "(não utilizado)"
+                ),
             )
 
             logger.info(
                 "  Atacante: %s",
-                self
-                .config
-                .attacker
-                .component_id,
+                (
+                    self
+                    .config
+                    .attacker
+                    .component_id
+                    if (
+                        self
+                        .config
+                        .attacker
+                        is not None
+                    )
+                    else "(não utilizado)"
+                ),
             )
 
             logger.info(
@@ -176,28 +194,16 @@ class ExperimentRunner:
                 .component_id,
             )
 
-            logger.info("")
-            logger.info(
-                "[1/4] Preparando dados"
-            )
-
-            dataset_data = (
-                self._load_dataset()
-            )
-
-            self._validate_dataset(
-                dataset_data
-            )
-
-            fit_scaler = True
-
             if (
                 self.config.mode
-                == ExperimentMode.SIMULATE
+                == ExperimentMode.OBSERVE
             ):
-                network = (
-                    self.config.network
+                logger.info("")
+                logger.info(
+                    "[1/4] Preparando observação"
                 )
+
+                network = self.config.network
 
                 if (
                     network is None
@@ -205,7 +211,7 @@ class ExperimentRunner:
                     .preprocessor_source
                 ):
                     raise RuntimeError(
-                        "SIMULATE sem "
+                        "OBSERVE sem "
                         "preprocessor_source"
                     )
 
@@ -221,81 +227,162 @@ class ExperimentRunner:
                     )
                 )
 
-                expected_features = list(
+                dataset_data = None
+
+                X_train = None
+                X_val = None
+                X_test = None
+
+                y_train = None
+                y_val = None
+                y_test = None
+
+                input_dim = len(
                     preprocessor
                     .feature_names
                 )
 
-                dataset_features = list(
-                    dataset_data
-                    .schema
-                    .feature_names
+                preprocessor.salvar(
+                    run_dir
+                    / "preprocessador"
                 )
 
-                if (
-                    expected_features
-                    != dataset_features
-                ):
-                    raise ValueError(
-                        "Schema do dataset não "
-                        "corresponde ao "
-                        "preprocessador utilizado "
-                        "no treinamento"
-                    )
+                logger.info(
+                    "  Preprocessador persistido: %s",
+                    network.preprocessor_source,
+                )
 
-                fit_scaler = False
+                logger.info(
+                    "  Features esperadas: %d",
+                    input_dim,
+                )
 
             else:
-                preprocessor = (
-                    self
-                    ._preprocessor_factory()
+                logger.info("")
+                logger.info(
+                    "[1/4] Preparando dados"
                 )
 
-                preprocessor.configurar_dataset(
+                dataset_data = (
+                    self._load_dataset()
+                )
+
+                self._validate_dataset(
                     dataset_data
                 )
 
-            (
-                X_train,
-                X_val,
-                X_test,
-                y_train,
-                y_val,
-                y_test,
-            ) = (
-                preprocessor
-                .split_e_normalizar(
-                    dataset_data.X,
-                    dataset_data.y,
+                fit_scaler = True
 
-                    test_size=(
+                if (
+                    self.config.mode
+                    == ExperimentMode.SIMULATE
+                ):
+                    network = (
+                        self.config.network
+                    )
+
+                    if (
+                        network is None
+                        or not network
+                        .preprocessor_source
+                    ):
+                        raise RuntimeError(
+                            "SIMULATE sem "
+                            "preprocessor_source"
+                        )
+
+                    from gan.preprocessing import (
+                        Preprocessador,
+                    )
+
+                    preprocessor = (
+                        Preprocessador
+                        .carregar(
+                            network
+                            .preprocessor_source
+                        )
+                    )
+
+                    expected_features = list(
+                        preprocessor
+                        .feature_names
+                    )
+
+                    dataset_features = list(
+                        dataset_data
+                        .schema
+                        .feature_names
+                    )
+
+                    if (
+                        expected_features
+                        != dataset_features
+                    ):
+                        raise ValueError(
+                            "Schema do dataset não "
+                            "corresponde ao "
+                            "preprocessador utilizado "
+                            "no treinamento"
+                        )
+
+                    fit_scaler = False
+
+                else:
+                    preprocessor = (
                         self
-                        .config
-                        .split
-                        .test_size
-                    ),
+                        ._preprocessor_factory()
+                    )
 
-                    validation_size=(
-                        self
-                        .config
-                        .split
-                        .validation_size
-                    ),
+                    preprocessor.configurar_dataset(
+                        dataset_data
+                    )
 
-                    random_state=(
-                        self.config.seed
-                    ),
+                (
+                    X_train,
+                    X_val,
+                    X_test,
+                    y_train,
+                    y_val,
+                    y_test,
+                ) = (
+                    preprocessor
+                    .split_e_normalizar(
+                        dataset_data.X,
+                        dataset_data.y,
 
-                    fit_scaler=(
-                        fit_scaler
-                    ),
+                        test_size=(
+                            self
+                            .config
+                            .split
+                            .test_size
+                        ),
+
+                        validation_size=(
+                            self
+                            .config
+                            .split
+                            .validation_size
+                        ),
+
+                        random_state=(
+                            self.config.seed
+                        ),
+
+                        fit_scaler=(
+                            fit_scaler
+                        ),
+                    )
                 )
-            )
 
-            preprocessor.salvar(
-                run_dir
-                / "preprocessador"
-            )
+                preprocessor.salvar(
+                    run_dir
+                    / "preprocessador"
+                )
+
+
+                input_dim = int(
+                    X_train.shape[1]
+                )
 
             snapshot = (
                 self._build_snapshot(
@@ -304,7 +391,7 @@ class ExperimentRunner:
                         dataset_data
                     ),
                     input_dim=(
-                        X_train.shape[1]
+                        input_dim
                     ),
                     feature_names=(
                         preprocessor
@@ -392,6 +479,12 @@ class ExperimentRunner:
             .config
             .attack_dataset
         )
+
+        if selection is None:
+            raise RuntimeError(
+                "Modo atual não possui "
+                "attack_dataset"
+            )
 
         if not selection.source:
             raise ValueError(
@@ -486,6 +579,12 @@ class ExperimentRunner:
             .attack_dataset
         )
 
+        attacker_selection = (
+            self
+            .config
+            .attacker
+        )
+
         network = (
             self.config.network
         )
@@ -552,6 +651,10 @@ class ExperimentRunner:
                     network.packet_limit
                 ),
 
+                "capture_duration": (
+                    network.capture_duration
+                ),
+
                 "classification_threshold": (
                     network
                     .classification_threshold
@@ -572,6 +675,37 @@ class ExperimentRunner:
                     network.observe
                 ),
             }
+
+        dataset_config = None
+
+        if dataset_selection is not None:
+            dataset_config = {
+                "component_id": (
+                    dataset_selection
+                    .component_id
+                ),
+
+                "source": (
+                    dataset_selection
+                    .source
+                ),
+
+                "params": dict(
+                    dataset_selection
+                    .params
+                ),
+
+                "metadata": (
+                    dataset_data.metadata
+                    if dataset_data is not None
+                    else None
+                ),
+            }
+
+        is_observation = (
+            self.config.mode
+            == ExperimentMode.OBSERVE
+        )
 
         return {
             "run_id": run_id,
@@ -598,36 +732,22 @@ class ExperimentRunner:
             # ferramentas da linha 1.x.
             "dataset": (
                 dataset_selection.source
+                if dataset_selection
+                is not None
+                else None
             ),
 
-            "dataset_config": {
-                "component_id": (
-                    dataset_selection
-                    .component_id
-                ),
-
-                "source": (
-                    dataset_selection
-                    .source
-                ),
-
-                "params": dict(
-                    dataset_selection
-                    .params
-                ),
-
-                "metadata": (
-                    dataset_data
-                    .metadata
-                ),
-            },
+            "dataset_config": (
+                dataset_config
+            ),
 
             "components": {
                 "attacker": (
-                    self
-                    .config
-                    .attacker
+                    attacker_selection
                     .component_id
+                    if attacker_selection
+                    is not None
+                    else None
                 ),
 
                 "defender": (
@@ -640,6 +760,9 @@ class ExperimentRunner:
                 "dataset": (
                     dataset_selection
                     .component_id
+                    if dataset_selection
+                    is not None
+                    else None
                 ),
 
                 "protocol": (
@@ -708,10 +831,11 @@ class ExperimentRunner:
 
             "component_config": {
                 "attacker": (
-                    self
-                    .config
-                    .attacker
+                    attacker_selection
                     .to_dict()
+                    if attacker_selection
+                    is not None
+                    else None
                 ),
 
                 "defender": (
@@ -724,6 +848,9 @@ class ExperimentRunner:
                 "attack_dataset": (
                     dataset_selection
                     .to_dict()
+                    if dataset_selection
+                    is not None
+                    else None
                 ),
 
                 "benign_dataset": (
@@ -769,20 +896,28 @@ class ExperimentRunner:
                 ),
 
                 "validation_size": (
-                    self
-                    .config
-                    .split
-                    .validation_size
+                    None
+                    if is_observation
+                    else (
+                        self
+                        .config
+                        .split
+                        .validation_size
+                    )
                 ),
 
                 "test_size": (
-                    self
-                    .config
-                    .split
-                    .test_size
+                    None
+                    if is_observation
+                    else (
+                        self
+                        .config
+                        .split
+                        .test_size
+                    )
                 ),
 
-                "feature_names": (
+                "feature_names": list(
                     feature_names
                 ),
             },

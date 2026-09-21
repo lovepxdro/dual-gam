@@ -2,12 +2,15 @@ import pytest
 
 from adarena.builtin import (
     ADVERSARIAL_PROTOCOL_ID,
+    BASIC_FLOW_EXTRACTOR_ID,
     BINARY_MLP_DEFENDER_ID,
     CICIDS2017_DATASET_ID,
     CICIDS2017_RENDERER_ID,
-    PERTURBATION_ATTACKER_ID,
-    SCAPY_NETWORK_BACKEND_ID,
+    NETWORK_OBSERVATION_PROTOCOL_ID,
     NETWORK_SIMULATION_PROTOCOL_ID,
+    PERTURBATION_ATTACKER_ID,
+    SCAPY_CAPTURE_ID,
+    SCAPY_NETWORK_BACKEND_ID,
     create_default_registry,
 )
 
@@ -28,6 +31,10 @@ from adarena.core.registry import (
 
 from adarena.datasets import (
     CICIDS2017Dataset,
+)
+
+from adarena.protocols.network_observation import (
+    NetworkObservationProtocol,
 )
 
 from gan.models import (
@@ -112,6 +119,18 @@ def test_registry_builtin_expoe_componentes_atuais():
         )
     )
 
+    captures = registry.list(
+        kind=(
+            ComponentKind.CAPTURE
+        )
+    )
+
+    extractors = registry.list(
+        kind=(
+            ComponentKind.EXTRACTOR
+        )
+    )
+
     assert [
         spec.component_id
         for spec
@@ -142,6 +161,7 @@ def test_registry_builtin_expoe_componentes_atuais():
         in protocols
     ] == [
         ADVERSARIAL_PROTOCOL_ID,
+        NETWORK_OBSERVATION_PROTOCOL_ID,
         NETWORK_SIMULATION_PROTOCOL_ID,
     ]
 
@@ -153,7 +173,6 @@ def test_registry_builtin_expoe_componentes_atuais():
         CICIDS2017_RENDERER_ID
     ]
 
-
     assert [
         spec.component_id
         for spec
@@ -161,6 +180,23 @@ def test_registry_builtin_expoe_componentes_atuais():
     ] == [
         SCAPY_NETWORK_BACKEND_ID
     ]
+
+    assert [
+        spec.component_id
+        for spec
+        in captures
+    ] == [
+        SCAPY_CAPTURE_ID
+    ]
+
+    assert [
+        spec.component_id
+        for spec
+        in extractors
+    ] == [
+        BASIC_FLOW_EXTRACTOR_ID
+    ]
+
 
 def test_registry_instancia_implementacoes_atuais():
 
@@ -183,6 +219,12 @@ def test_registry_instancia_implementacoes_atuais():
         CICIDS2017_DATASET_ID
     )
 
+    observation_protocol = (
+        registry.create(
+            NETWORK_OBSERVATION_PROTOCOL_ID
+        )
+    )
+
     assert isinstance(
         attacker,
         Atacante,
@@ -196,6 +238,11 @@ def test_registry_instancia_implementacoes_atuais():
     assert isinstance(
         dataset,
         CICIDS2017Dataset,
+    )
+
+    assert isinstance(
+        observation_protocol,
+        NetworkObservationProtocol,
     )
 
     assert (

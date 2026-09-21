@@ -34,16 +34,25 @@ class ProtocolContext:
     run_id: str
     run_dir: Path
 
-    X_train: np.ndarray
-    X_val: np.ndarray
-    X_test: np.ndarray
+    # Protocolos de treinamento/simulação recebem
+    # os splits preparados pelo Runner. Protocolos
+    # puramente observacionais não dependem de
+    # dataset e, portanto, recebem None nestes campos.
+    X_train: np.ndarray | None
+    X_val: np.ndarray | None
+    X_test: np.ndarray | None
 
-    y_train: np.ndarray
-    y_val: np.ndarray
-    y_test: np.ndarray
+    y_train: np.ndarray | None
+    y_val: np.ndarray | None
+    y_test: np.ndarray | None
 
+    # O preprocessador continua obrigatório para
+    # qualquer protocolo que execute inferência.
     preprocessor: Any
-    dataset_data: Any
+
+    # Pode ser None em modos que observam apenas
+    # tráfego já existente na rede.
+    dataset_data: Any | None
 
     config_snapshot: dict[
         str,

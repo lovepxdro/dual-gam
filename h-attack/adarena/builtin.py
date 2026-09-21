@@ -31,6 +31,11 @@ ADVERSARIAL_PROTOCOL_ID = (
     "adarena.adversarial_training"
 )
 
+
+NETWORK_OBSERVATION_PROTOCOL_ID = (
+    "adarena.network_observation"
+)
+
 NETWORK_SIMULATION_PROTOCOL_ID = (
     "adarena.network_simulation"
 )
@@ -195,6 +200,18 @@ def _create_basic_flow_extractor(
     )
 
     return BasicFlowExtractor()
+
+
+def _create_network_observation_protocol(
+    **_,
+):
+    from .protocols.network_observation import (
+        NetworkObservationProtocol,
+    )
+
+    return (
+        NetworkObservationProtocol()
+    )
 
 
 def register_builtin_components(
@@ -368,6 +385,43 @@ def register_builtin_components(
         ),
 
         _create_adversarial_protocol,
+    )
+
+
+    registry.register(
+        ComponentSpec(
+            component_id=(
+                NETWORK_OBSERVATION_PROTOCOL_ID
+            ),
+
+            kind=(
+                ComponentKind
+                .EXPERIMENT_PROTOCOL
+            ),
+
+            name=(
+                "Network Observation Protocol"
+            ),
+
+            version="1.0",
+
+            description=(
+                "Protocolo de observação "
+                "passiva da rede com "
+                "inferência e controle "
+                "em dry-run."
+            ),
+
+            tags=(
+                "builtin",
+                "network",
+                "observation",
+                "passive",
+                "dry-run",
+            ),
+        ),
+
+        _create_network_observation_protocol,
     )
 
     registry.register(

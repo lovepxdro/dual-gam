@@ -27,6 +27,8 @@ class ExperimentMode(
 
     SIMULATE = "simulate"
 
+    OBSERVE = "observe"
+
     TRAIN_AND_SIMULATE = (
         "train_and_simulate"
     )
@@ -228,6 +230,8 @@ class NetworkSettings:
         | None
     ) = None
 
+    capture_duration: float = 5.0
+
     classification_threshold: (
         float
         | None
@@ -256,6 +260,12 @@ class NetworkSettings:
         ):
             raise ValueError(
                 "network.packet_limit "
+                "deve ser > 0"
+            )
+
+        if self.capture_duration <= 0:
+            raise ValueError(
+                "network.capture_duration "
                 "deve ser > 0"
             )
 
@@ -341,11 +351,17 @@ class ExperimentConfig:
     ADArena.
     """
 
-    attacker: ComponentSelection
+    attacker: (
+        ComponentSelection
+        | None
+    )
 
     defender: ComponentSelection
 
-    attack_dataset: ComponentSelection
+    attack_dataset: (
+        ComponentSelection
+        | None
+    )
 
     benign_dataset: (
         ComponentSelection
@@ -397,94 +413,6 @@ class ExperimentConfig:
     ) -> None:
 
         # ---------------------------------
-        # Componentes centrais
-        # ---------------------------------
-
-        self._require_kind(
-            registry,
-            self.attacker,
-            ComponentKind.ATTACKER,
-        )
-
-        self._require_kind(
-            registry,
-            self.defender,
-            ComponentKind.DEFENDER,
-        )
-
-        self._require_kind(
-            registry,
-            self.attack_dataset,
-            ComponentKind.DATASET,
-        )
-
-        if (
-            self.benign_dataset
-            is not None
-        ):
-            self._require_kind(
-                registry,
-                self.benign_dataset,
-                ComponentKind.DATASET,
-            )
-
-        if self.protocol is not None:
-            self._require_kind(
-                registry,
-                self.protocol,
-                ComponentKind
-                .EXPERIMENT_PROTOCOL,
-            )
-
-        attacker_spec = (
-            registry.spec(
-                self
-                .attacker
-                .component_id
-            )
-        )
-
-        defender_spec = (
-            registry.spec(
-                self
-                .defender
-                .component_id
-            )
-        )
-
-        dataset_spec = (
-            registry.spec(
-                self
-                .attack_dataset
-                .component_id
-            )
-        )
-
-        # ---------------------------------
-        # Dataset -> atacante
-        # ---------------------------------
-
-        self._require_representation_match(
-            producer_name=(
-                "dataset de ataque"
-            ),
-
-            producer_output=(
-                dataset_spec
-                .output_representation
-            ),
-
-            consumer_name=(
-                "atacante"
-            ),
-
-            consumer_input=(
-                attacker_spec
-                .input_representation
-            ),
-        )
-
-        # ---------------------------------
         # Modos
         # ---------------------------------
 
@@ -506,11 +434,128 @@ class ExperimentConfig:
             }
         )
 
+        observes = (
+            self.mode
+            == ExperimentMode.OBSERVE
+        )
+
+        needs_attack_path = (
+            trains
+            or simulates
+        )
+
+        # ---------------------------------
+        # Componentes centrais
+        # ---------------------------------
+
+        if needs_attack_path:
+            if self.attacker is None:
+                raise ValueError(
+                    "Este modo exige attacker"
+                )
+
+            if self.attack_dataset is None:
+                raise ValueError(
+                    "Este modo exige "
+                    "attack_dataset"
+                )
+
+            self._require_kind(
+                registry,
+                self.attacker,
+                ComponentKind.ATTACKER,
+            )
+
+            self._require_kind(
+                registry,
+                self.attack_dataset,
+                ComponentKind.DATASET,
+            )
+
+        self._require_kind(
+            registry,
+            self.defender,
+            ComponentKind.DEFENDER,
+        )
+
+        if (
+            self.benign_dataset
+            is not None
+        ):
+            self._require_kind(
+                registry,
+                self.benign_dataset,
+                ComponentKind.DATASET,
+            )
+
+        if self.protocol is not None:
+            self._require_kind(
+                registry,
+                self.protocol,
+                ComponentKind
+                .EXPERIMENT_PROTOCOL,
+            )
+
+        attacker_spec = None
+        dataset_spec = None
+
+        if needs_attack_path:
+            assert self.attacker is not None
+            assert self.attack_dataset is not None
+
+            attacker_spec = registry.spec(
+                self.attacker.component_id
+            )
+
+            dataset_spec = registry.spec(
+                self
+                .attack_dataset
+                .component_id
+            )
+
+        defender_spec = (
+            registry.spec(
+                self
+                .defender
+                .component_id
+            )
+        )
+
+        # ---------------------------------
+        # Dataset -> atacante
+        # ---------------------------------
+
+        if needs_attack_path:
+            assert attacker_spec is not None
+            assert dataset_spec is not None
+
+            self._require_representation_match(
+                producer_name=(
+                    "dataset de ataque"
+                ),
+
+                producer_output=(
+                    dataset_spec
+                    .output_representation
+                ),
+
+                consumer_name=(
+                    "atacante"
+                ),
+
+                consumer_input=(
+                    attacker_spec
+                    .input_representation
+                ),
+            )
+
         # ---------------------------------
         # Caminho de treinamento
         # ---------------------------------
 
         if trains:
+            assert attacker_spec is not None
+
             self._require_representation_match(
                 producer_name=(
                     "atacante"
@@ -589,6 +634,8 @@ class ExperimentConfig:
                 is not None
             )
 
+            assert self.attacker is not None
+
             if not (
                 self.network
                 .preprocessor_source
@@ -610,7 +657,48 @@ class ExperimentConfig:
                     "em defender.source"
                 )
 
+        if observes:
+            if self.network is None:
+                raise ValueError(
+                    "OBSERVE exige "
+                    "network configurado"
+                )
+
+            if not (
+                self.network
+                .preprocessor_source
+            ):
+                raise ValueError(
+                    "OBSERVE exige "
+                    "network.preprocessor_source"
+                )
+
+            if not self.defender.source:
+                raise ValueError(
+                    "OBSERVE exige checkpoint "
+                    "em defender.source"
+                )
+
+            if self.network.capture is None:
+                raise ValueError(
+                    "OBSERVE exige "
+                    "network.capture"
+                )
+
+            if self.network.extractor is None:
+                raise ValueError(
+                    "OBSERVE exige "
+                    "network.extractor"
+                )
+
+            self._validate_observation_components(
+                registry=registry,
+                defender_spec=defender_spec,
+            )
+
         if simulates:
+            assert attacker_spec is not None
+
             self._validate_network_components(
                 registry=registry,
 
@@ -650,6 +738,91 @@ class ExperimentConfig:
         self.split.validate()
 
         self.training.validate()
+
+    def _validate_observation_components(
+        self,
+        *,
+        registry: ComponentRegistry,
+        defender_spec,
+    ) -> None:
+
+        network = self.network
+
+        if network is None:
+            raise RuntimeError(
+                "Configuração de rede "
+                "não disponível"
+            )
+
+        if network.capture is None:
+            raise RuntimeError(
+                "Capture não configurado"
+            )
+
+        if network.extractor is None:
+            raise RuntimeError(
+                "Extractor não configurado"
+            )
+
+        self._require_kind(
+            registry,
+            network.capture,
+            ComponentKind.CAPTURE,
+        )
+
+        self._require_kind(
+            registry,
+            network.extractor,
+            ComponentKind.EXTRACTOR,
+        )
+
+        capture_spec = (
+            registry.spec(
+                network
+                .capture
+                .component_id
+            )
+        )
+
+        extractor_spec = (
+            registry.spec(
+                network
+                .extractor
+                .component_id
+            )
+        )
+
+        self._require_representation_match(
+            producer_name="capture",
+
+            producer_output=(
+                capture_spec
+                .output_representation
+            ),
+
+            consumer_name="extractor",
+
+            consumer_input=(
+                extractor_spec
+                .input_representation
+            ),
+        )
+
+        self._require_representation_match(
+            producer_name="extractor",
+
+            producer_output=(
+                extractor_spec
+                .output_representation
+            ),
+
+            consumer_name="defensor",
+
+            consumer_input=(
+                defender_spec
+                .input_representation
+            ),
+        )
 
     def _validate_network_components(
         self,
