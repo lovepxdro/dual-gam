@@ -16,13 +16,13 @@ from adarena.application import (
     ModeMismatchError,
     PreflightError,
     execute_config,
+    validate_config_file,
 )
 from adarena.builtin import (
     create_default_registry,
 )
 from adarena.config_io import (
     ConfigLoadError,
-    load_experiment_config,
 )
 from adarena.core.components import (
     ComponentKind,
@@ -41,6 +41,9 @@ from adarena.runs import (
     find_run,
     summarize_components,
 )
+from adarena.tui.app import (
+    run_tui,
+)
 
 
 app = typer.Typer(
@@ -49,7 +52,8 @@ app = typer.Typer(
         "ADArena — ambiente experimental para "
         "defesa adaptativa."
     ),
-    no_args_is_help=True,
+    invoke_without_command=True,
+    no_args_is_help=False,
     add_completion=False,
 )
 
@@ -323,8 +327,11 @@ def _print_runs(
     console.print(table)
 
 
-@app.callback()
+@app.callback(
+    invoke_without_command=True
+)
 def root(
+    ctx: typer.Context,
     verbose: bool = typer.Option(
         False,
         "--verbose",
@@ -335,6 +342,16 @@ def root(
         ),
     ),
 ) -> None:
+    if (
+        ctx.invoked_subcommand
+        is None
+    ):
+        # A TUI não instala o RichHandler do terminal.
+        # Os experimentos continuam registrando logs
+        # nos arquivos próprios de cada run.
+        run_tui()
+        return
+
     configure_console_logging(
         verbose=verbose
     )
@@ -421,16 +438,8 @@ def validate_config(
     ),
 ) -> None:
     try:
-        config = load_experiment_config(
+        config = validate_config_file(
             path
-        )
-
-        registry = (
-            create_default_registry()
-        )
-
-        config.validate(
-            registry
         )
 
     except (

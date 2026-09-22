@@ -20,11 +20,13 @@ Este README fornece uma introdução ao projeto. Para detalhes sobre **arquitetu
 
 ## Versões
 
-| Versão | Alteração |
-| ------ | --------- |
-| v1.0 | Implementação inicial |
-| v1.7 | Consolidação da linha v1.x |
-| v2.4 | Fechamento da arquitetura |
+| Versão | Marco |
+| --- | --- |
+| v1.0 | Primeira implementação funcional |
+| v1.7 | Treinamento adversarial e avaliação experimental |
+| v2.0 | Core modular, Registry e Protocols |
+| v2.4 | Fechamento da arquitetura: rede, observação e controle |
+| v2.7 | Plataforma completa: CLI, TUI, construtor de experimentos e reprodutibilidade |
 
 ---
 

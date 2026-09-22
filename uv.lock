@@ -72,6 +72,7 @@ dependencies = [
     { name = "rich" },
     { name = "scapy" },
     { name = "scikit-learn" },
+    { name = "textual" },
     { name = "torch", version = "2.3.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or sys_platform == 'darwin'" },
     { name = "torch", version = "2.3.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
     { name = "tqdm" },
@@ -92,6 +93,7 @@ requires-dist = [
     { name = "rich", specifier = ">=14,<15" },
     { name = "scapy", specifier = "==2.5.0" },
     { name = "scikit-learn", specifier = "==1.5.0" },
+    { name = "textual", specifier = ">=8.2,<9" },
     { name = "torch", specifier = "==2.3.1", index = "https://download.pytorch.org/whl/cpu" },
     { name = "tqdm", specifier = "==4.66.4" },
     { name = "typer", specifier = ">=0.16,<1" },
@@ -203,6 +205,15 @@ wheels = [
 ]
 
 [[package]]
+name = "linkify-it-py"
+version = "2.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/45/98/7a1a5f31fd5c7ba93e963b168e244b8e3dd705b3d2a718e3c3307583bf57/linkify_it_py-2.2.0.tar.gz", hash = "sha256:907acd2d17ac1fbb9ddb62c8957ccbd6158cac602231a15c3b0cd1e215f03cee", size = 32939, upload-time = "2026-08-29T07:07:08.305Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/13/d4/1152d1c7ab42d8b908be64fd200ddc870dc9d4925e951198702084aa1a7d/linkify_it_py-2.2.0-py3-none-any.whl", hash = "sha256:3adc40eb5af300b2605fcfdb968c24e1d780a90f1f2221af7c15e5111e94d443", size = 21971, upload-time = "2026-08-29T07:07:07.164Z" },
+]
+
+[[package]]
 name = "markdown-it-py"
 version = "4.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -212,6 +223,11 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/06/ff/7841249c247aa650a76b9ee4bbaeae59370dc8bfd2f6c01f3630c35eb134/markdown_it_py-4.2.0.tar.gz", hash = "sha256:04a21681d6fbb623de53f6f364d352309d4094dd4194040a10fd51833e418d49", size = 82454, upload-time = "2026-05-07T12:08:28.36Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/81/4da04ced5a082363ecfa159c010d200ecbd959ae410c10c0264a38cac0f5/markdown_it_py-4.2.0-py3-none-any.whl", hash = "sha256:9f7ebbcd14fe59494226453aed97c1070d83f8d24b6fc3a3bcf9a38092641c4a", size = 91687, upload-time = "2026-05-07T12:08:27.182Z" },
+]
+
+[package.optional-dependencies]
+linkify = [
+    { name = "linkify-it-py" },
 ]
 
 [[package]]
@@ -256,6 +272,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/41/f1/115e7c79b4506b4f0533acba742babd9718ff92eeca6d4205843173b6173/matplotlib-3.9.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:76cce0f31b351e3551d1f3779420cf8f6ec0d4a8cf9c0237a3b549fd28eb4abb", size = 8307002, upload-time = "2024-05-15T23:37:27.243Z" },
     { url = "https://files.pythonhosted.org/packages/7a/a2/5c1a64d188c4cae7368ebb8c28a354e3f262cb86b28c38ffa6ee3ad532ba/matplotlib-3.9.0-cp311-cp311-musllinux_1_1_x86_64.whl", hash = "sha256:c53aeb514ccbbcbab55a27f912d79ea30ab21ee0531ee2c09f13800efb272674", size = 8600548, upload-time = "2024-05-15T23:37:29.701Z" },
     { url = "https://files.pythonhosted.org/packages/c6/c8/6936e8c7b279a5abac82f399d8d72ac25da530cf5f78a0e40063e492558c/matplotlib-3.9.0-cp311-cp311-win_amd64.whl", hash = "sha256:a5be985db2596d761cdf0c2eaf52396f26e6a64ab46bd8cd810c48972349d1be", size = 7963606, upload-time = "2024-05-15T23:37:32.803Z" },
+]
+
+[[package]]
+name = "mdit-py-plugins"
+version = "0.6.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "markdown-it-py" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/59/fc/f8d0863f8862f25602c0404d75568e89fb6b4109804645e5cdfb1be5cf56/mdit_py_plugins-0.6.1.tar.gz", hash = "sha256:a2bca0f039f39dbd35fb74ae1b5f998608c437463371f0ff7f49a19a17a114d0", size = 56114, upload-time = "2026-05-13T09:03:38.91Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a5/69/6da5581c6a7fede7dc261bf4e67d6adca4196f176b43288b55b3db395b6e/mdit_py_plugins-0.6.1-py3-none-any.whl", hash = "sha256:214c82fb2ac524472ab6a5bcab1de80f73b50443e187f401bfd77efbc7c6481d", size = 66663, upload-time = "2026-05-13T09:03:37.76Z" },
 ]
 
 [[package]]
@@ -364,6 +392,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/bf/20/22fe9384b7949e25fb1293bcfc84fb82590ff4ea6b37c95b24d26d793d86/pillow-12.3.0-pp311-pypy311_pp73-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:fbd139c8447d25dd750ab79ee274cc5e1fe80fc56340ab10b18a195e1b6eca3e", size = 5237776, upload-time = "2026-07-01T11:56:30.263Z" },
     { url = "https://files.pythonhosted.org/packages/08/14/f6ba68107680ffa74b39985f3f30884e41318fbc4250caa423c79b4788bb/pillow-12.3.0-pp311-pypy311_pp73-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:e7e480451b9fa137494bccd3a7d69adbe8ac65a87d97be61e11f1b1050a5bac3", size = 5860358, upload-time = "2026-07-01T11:56:32.68Z" },
     { url = "https://files.pythonhosted.org/packages/36/54/0169bc772ec491108b62f644f8ecf1fe5d8ae5ebafde2ee2142210166903/pillow-12.3.0-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:04f01d28a6aaff387bf842a13be313df23ba0597a44f1a976c9feb3c6ff4711a", size = 7231786, upload-time = "2026-07-01T11:56:35.046Z" },
+]
+
+[[package]]
+name = "platformdirs"
+version = "4.11.11"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f8/13/f870dd0b42690138e4e37a76b5138e5690ed4365a77071bb092d59037da0/platformdirs-4.11.11.tar.gz", hash = "sha256:b0befe8a90759e4a9a8b9820d434ae226a6549063210b596da0038a7a05aede4", size = 39949, upload-time = "2026-09-19T01:18:47.259Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/39/be/3ae887e84c38c4dd1c549cd5825adc93f48069a94fe1cb8ac52a9da16f15/platformdirs-4.11.11-py3-none-any.whl", hash = "sha256:972ea6b2b387155a536226a0750e46923d731d459a387c4a255c583ed2f64547", size = 24992, upload-time = "2026-09-19T01:18:45.825Z" },
 ]
 
 [[package]]
@@ -543,6 +580,23 @@ source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/fb/8a/5062b00c378c051e26507e5eca8d3b5c91ed63f8a2139f6f0f422be84b02/tbb-2021.13.1-py3-none-win32.whl", hash = "sha256:00f5e5a70051650ddd0ab6247c0549521968339ec21002e475cd23b1cbf46d66", size = 248994, upload-time = "2024-08-07T15:10:08.934Z" },
     { url = "https://files.pythonhosted.org/packages/9b/24/84ce997e8ae6296168a74d0d9c4dde572d90fb23fd7c0b219c30ff71e00e/tbb-2021.13.1-py3-none-win_amd64.whl", hash = "sha256:cbf024b2463fdab3ebe3fa6ff453026358e6b903839c80d647e08ad6d0796ee9", size = 286908, upload-time = "2024-08-07T15:09:05.677Z" },
+]
+
+[[package]]
+name = "textual"
+version = "8.2.8"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "markdown-it-py", extra = ["linkify"] },
+    { name = "mdit-py-plugins" },
+    { name = "platformdirs" },
+    { name = "pygments" },
+    { name = "rich" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/00/21/39a76b01bd5eea82a04baaca7580e105d8c59450df03998345bb2cfb307b/textual-8.2.8.tar.gz", hash = "sha256:3f106a9fbc73e39dd266c9712432087de78a6d644084c7c241d6a25c3169115b", size = 1860502, upload-time = "2026-06-30T06:51:24.495Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fb/be/35261223d9416a0751cdff1c7b4a6f881387218a12d439fe22fefebc8c04/textual-8.2.8-py3-none-any.whl", hash = "sha256:267375fd402dc8d981457212efa71f0e3365fd17bba144ba9bb3ed7563cb374a", size = 731418, upload-time = "2026-06-30T06:51:26.364Z" },
 ]
 
 [[package]]

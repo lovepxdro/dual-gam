@@ -24,7 +24,7 @@ def test_execute_config_rejeita_mode_diferente(
 
     monkeypatch.setattr(
         application,
-        "load_experiment_config",
+        "validate_config_file",
         lambda path: config,
     )
 

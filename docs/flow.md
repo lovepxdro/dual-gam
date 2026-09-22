@@ -1,62 +1,179 @@
 # Fluxos de execução da ADArena
 
-Este documento descreve os principais fluxos da linha atual da ADArena.
+Este documento descreve os fluxos formais e os níveis de validação da linha atual da **ADArena — Adaptive Defense Arena**.
 
-A arquitetura possui hoje três caminhos formais:
+A plataforma possui três modos públicos principais:
 
-1. **treinamento adversarial**;
-2. **simulação feature-space → rede em `dry-run`**;
-3. **observação passiva rede → feature-space → Defender → controle**.
+1. **TRAIN** — treinamento experimental;
+2. **SIMULATE** — validação feature-space → backend exclusivamente em `dry-run`;
+3. **OBSERVE** — observação passiva rede → features → Defender → controle em `dry-run`.
 
-Os três caminhos passam pelo mesmo Core experimental, mas cada protocolo recebe apenas os recursos de que realmente precisa.
+Além dos modos públicos, a suíte utiliza testes sintéticos/fakes e smoke tests. Eles são estratégias de validação, não novos modos da aplicação.
 
-> Para a visão estrutural dos componentes, consulte `architecture.md`.
+> Para a visão estrutural dos componentes, consulte `architecture.md`. Para operação da CLI/TUI e significado dos parâmetros, consulte `usage.md`.
 
 ---
 
-## 1. Ciclo geral de uma execução
+## 1. Entrada da ferramenta
 
-Todas as execuções novas passam pelo mesmo Core.
+Existem duas formas de construir uma execução.
+
+### 1.1 TUI
+
+```text
+usuário
+   ↓
+TUI Builder
+   ↓
+seleção de modo
+   ↓
+seleção de componentes via Registry
+   ↓
+parâmetros
+   ↓
+ExperimentConfig
+```
+
+O `ExperimentConfig` pode então ser:
+
+```text
+validado
+salvo como TOML
+executado
+```
+
+### 1.2 CLI / TOML
+
+```text
+TOML
+ ↓
+Config Loader
+ ↓
+ExperimentConfig
+```
+
+As duas entradas convergem para a mesma camada:
+
+```text
+TUI Builder ──► ExperimentConfig ──┐
+                                   │
+TOML ─────────► Config Loader ─────┤
+                                   ▼
+                            application.py
+                                   ↓
+                           ExperimentRunner
+                                   ↓
+                               Protocol
+```
+
+A TUI não implementa uma segunda versão do experimento.
+
+---
+
+## 2. Ciclo geral
 
 ```text
 ExperimentConfig
       ↓
-ExperimentRunner
+validação semântica
       ↓
-validação da configuração
+preflight de recursos externos
+      ↓
+ExperimentRunner
       ↓
 criação do run
       ↓
 preparação dependente do modo
       ↓
-ExperimentProtocol pelo Registry
+ExperimentProtocol resolvido pelo Registry
       ↓
 execução do protocolo
       ↓
 ProtocolResult
       ↓
-artefatos + métricas + snapshot
+métricas + artefatos + snapshot
 ```
 
-### 1.1 `ExperimentRunner`
+A validação semântica verifica, entre outros:
 
-O Runner é responsável por preparar a unidade experimental, mas não decide a lógica científica da execução.
+- tipo de cada componente;
+- compatibilidade de representações;
+- regras do modo;
+- valores gerais da configuração.
 
-Ele:
+O preflight verifica recursos externos conhecidos antes do início da execução, como:
 
-- valida a configuração;
-- cria `models/.../experiments/<run_id>`;
-- prepara dados quando o modo exige dataset;
-- carrega preprocessador persistido quando o modo exige reutilização;
-- salva `config_execucao.json`;
-- instancia o protocolo selecionado;
-- entrega um `ProtocolContext` ao protocolo;
-- recebe um `ProtocolResult`;
-- atualiza a referência `latest` ao final de uma execução bem-sucedida.
+- dataset;
+- checkpoints;
+- preprocessador persistido;
+- interface de captura.
 
-### 1.2 Preparação dependente do modo
+---
 
-O Runner não força mais dataset em todas as execuções.
+## 3. Registry e seleção de componentes
+
+A interface seleciona componentes registrados, e não classes concretas hardcoded.
+
+```text
+ComponentRegistry
+      ↓
+ComponentSpec
+      ├── component_id
+      ├── kind
+      ├── input_representation
+      ├── output_representation
+      └── factory
+```
+
+O Core verifica compatibilidade entre produtor e consumidor.
+
+Exemplo:
+
+```text
+Dataset
+output = FLOW_FEATURES
+       ↓
+Attacker
+input  = FLOW_FEATURES
+output = FLOW_FEATURES
+       ↓
+Defender
+input  = FLOW_FEATURES
+```
+
+No caminho de rede:
+
+```text
+Attacker
+   ↓
+Renderer
+   ↓
+NetworkBackend
+```
+
+e:
+
+```text
+Capture
+   ↓
+Extractor
+   ↓
+Defender
+```
+
+Isso separa duas ideias:
+
+```text
+arquitetura genérica
+        ≠
+componentes concretos universais
+```
+
+O núcleo está preparado para novos componentes, mas os built-ins atuais continuam concentrados no caso experimental de IDS baseado em flow features/CIC-IDS2017.
+
+---
+
+## 4. Preparação dependente do modo
 
 ```text
 TRAIN
@@ -74,36 +191,29 @@ Dataset
   ↓
 Preprocessor persistido
   ↓
-split sem novo fit do scaler
+split sem novo fit
+  ↓
+checkpoints persistidos
 
 
 OBSERVE
   ↓
 sem Dataset
+sem Attacker
 sem split
   ↓
 Preprocessor persistido
+  ↓
+Defender persistido
 ```
 
-Em `OBSERVE`:
-
-```text
-X_train = None
-X_val   = None
-X_test  = None
-
-y_train = None
-y_val   = None
-y_test  = None
-
-dataset_data = None
-```
+`OBSERVE` não precisa criar dados artificiais para validar o caminho defensivo.
 
 ---
 
-# 2. Treinamento adversarial
+# 5. TRAIN
 
-O treinamento é implementado por `AdversarialTrainingProtocol`.
+O treinamento é implementado pelo protocolo adversarial atual.
 
 ```text
 Dataset
@@ -121,13 +231,13 @@ D0
 │                                            │
 │ Attacker An treina contra D(n-1)           │
 │        ↓                                   │
-│ evasão pré-adaptação                       │
+│ avaliação pré-adaptação                    │
 │        ↓                                   │
-│ Defender aprende com adversariais          │
+│ Defender é atualizado                      │
 │        ↓                                   │
 │ Dn                                         │
 │        ↓                                   │
-│ evasão pós-adaptação                       │
+│ avaliação pós-adaptação                    │
 │        ↓                                   │
 │ checkpoints An e Dn                        │
 └────────────────────────────────────────────┘
@@ -139,118 +249,18 @@ avaliação final
 artefatos
 ```
 
-## 2.1 Pré-processamento
+## 5.1 Pré-processamento
 
-O preprocessador recebe o schema fornecido pelo Dataset e realiza o split experimental.
+Regras importantes:
 
-Regras metodológicas importantes:
-
-- o scaler é ajustado somente sobre o treino;
+- scaler ajustado somente no treino;
 - validação e teste não participam do `fit`;
-- o preprocessador utilizado é persistido junto da execução;
-- a ordem e os nomes das features são preservados para uso posterior.
+- preprocessador persistido junto do run;
+- nomes e ordem das features preservados.
 
-## 2.2 Pré-treino do Defender
+## 5.2 Checkpoints históricos
 
-Antes do ciclo competitivo, o Defender aprende a distinguir tráfego convencional.
-
-Esse estado inicial é preservado como `D0`.
-
-## 2.3 Rodadas adversariais
-
-Em uma rodada `n`:
-
-```text
-An × D(n-1)
-      ↓
-evasão pré-adaptação
-      ↓
-Defender é atualizado
-      ↓
-An × Dn
-      ↓
-evasão pós-adaptação
-```
-
-Essa separação permite medir a reação do Defender à estratégia observada naquela rodada.
-
-## 2.4 Checkpoints históricos
-
-Os checkpoints são preservados para permitir avaliações cruzadas.
-
-```text
-A1..An × D0..Dn
-```
-
-A matriz resultante é usada para estudar retenção, adaptação e robustez acumulada sem reduzir a análise ao par final.
-
-## 2.5 Artefatos
-
-O protocolo de treinamento produz, entre outros:
-
-```text
-checkpoints/
-metrics/
-plots/
-config_execucao.json
-historico_treino.json
-matriz_checkpoints.json
-matriz_checkpoints.csv
-summary.json
-attack_samples.pt
-ddos_samples.pt
-preprocessador/
-```
-
----
-
-# 3. Simulação feature-space → rede
-
-O fluxo é implementado por `NetworkSimulationProtocol`.
-
-Ele opera **exclusivamente em `dry-run`** na linha atual.
-
-```text
-Dataset real
-   ↓
-preprocessador persistido do treinamento
-   ↓
-seleção de amostras DDoS
-   ↓
-Attacker selecionado
-   ↓
-variantes adversariais
-   ↓
-Defender selecionado
-   ↓
-classificação
-   ↓
-somente evasões matemáticas
-   ↓
-Renderer
-   ↓
-somente traduções válidas
-   ↓
-NetworkBackend em dry-run
-```
-
-## 3.1 Reutilização do preprocessador
-
-Em `SIMULATE`, o Runner carrega o preprocessador indicado por `network.preprocessor_source`.
-
-O objetivo é garantir que a simulação use exatamente:
-
-- o mesmo schema;
-- a mesma ordem de features;
-- o mesmo scaler do treinamento.
-
-O scaler não é reajustado durante a simulação.
-
-## 3.2 Seleção dos checkpoints
-
-Attacker e Defender possuem `source` explícito na configuração.
-
-Isso permite executar cenários como:
+A preservação dos estados permite analisar pares como:
 
 ```text
 A1 × D0
@@ -258,34 +268,82 @@ A2 × D1
 An × Dm
 ```
 
-sem depender apenas dos checkpoints finais.
+e estudar adaptação, retenção e robustez sem reduzir a análise ao último par.
 
-## 3.3 Geração de variantes
+## 5.3 Smoke de treinamento
 
-O protocolo seleciona amostras de ataque do conjunto de teste e chama o Attacker em modo de inferência.
+Um smoke usa o **mesmo modo TRAIN**, porém com parâmetros reduzidos.
 
-As variantes produzidas são avaliadas pelo Defender selecionado.
+```text
+TRAIN normal
+  n_rodadas = N
+  epochs = N
+  amostras = N
+
+TRAIN smoke
+  n_rodadas = pequeno
+  epochs = pequeno
+  amostras = pequeno
+```
+
+Portanto:
+
+```text
+SMOKE ≠ ExperimentMode
+```
+
+O smoke responde se a integração continua funcional. Ele não substitui uma execução científica.
+
+---
+
+# 6. SIMULATE
+
+`NetworkSimulationProtocol` valida o caminho do espaço de features até o backend.
+
+Ele opera exclusivamente em `dry-run`.
+
+```text
+Dataset
+   ↓
+Preprocessor persistido
+   ↓
+seleção de amostras de ataque
+   ↓
+Attacker persistido
+   ↓
+variantes adversariais
+   ↓
+Defender persistido
+   ↓
+probabilidades
+   ↓
+threshold
+   ↓
+evasões matemáticas
+   ↓
+Renderer
+   ↓
+traduções válidas
+   ↓
+NetworkBackend
+   ↓
+dry-run
+```
+
+## 6.1 Threshold
 
 Com threshold `τ`:
 
 ```text
-P(DDoS) >= τ  → detectado como ataque
-P(DDoS) <  τ  → evasão matemática
+score >= τ  → ataque
+score <  τ  → evasão matemática
 ```
 
-## 3.4 Renderer
+Somente as evasões matemáticas seguem para a etapa de tradução.
 
-Somente evasões matemáticas seguem para o Renderer.
+## 6.2 Renderer
 
-```text
-evasão matemática
-      ↓
-Renderer
-      ↓
-tradução válida ou rejeição
-```
-
-A arquitetura mantém explicitamente a distinção:
+A arquitetura preserva a distinção:
 
 ```text
 evasão matemática
@@ -293,49 +351,37 @@ evasão matemática
 tradução válida
 ```
 
-## 3.5 Backend
+Uma amostra pode evadir o classificador e ainda não poder ser traduzida de forma consistente para a representação esperada pelo backend.
 
-As traduções válidas seguem para o `NetworkBackend`.
+## 6.3 Backend
 
-Na linha atual:
-
-```text
-dry_run = True
-```
-
-é obrigatório para esse protocolo.
-
-Portanto, essa etapa valida o caminho de materialização sem transmitir tráfego ofensivo.
-
-## 3.6 Métricas principais
-
-O protocolo registra, entre outras:
-
-- quantidade de amostras selecionadas;
-- evasões matemáticas;
-- taxa de evasão matemática;
-- traduções válidas;
-- taxa de tradução sobre o total;
-- taxa de tradução condicionada à evasão;
-- execuções do backend em `dry-run`;
-- threshold utilizado;
-- epsilon;
-- estado da observação.
-
-## 3.7 Artefatos
+A interface pública exige:
 
 ```text
-network/
-├── selected_attack_samples.npy
-├── adversarial_samples.npy
-└── simulation_summary.json
+dry_run = true
 ```
+
+Portanto, `SIMULATE` valida:
+
+```text
+feature-space
+    ↓
+Attacker
+    ↓
+Defender
+    ↓
+Renderer
+    ↓
+Backend dry-run
+```
+
+sem transformar a plataforma em um caminho público de transmissão ofensiva.
 
 ---
 
-# 4. Inferência rede → feature-space
+# 7. Inferência rede → feature-space
 
-O caminho base de inferência é implementado por `NetworkInferencePipeline`.
+O caminho defensivo básico é:
 
 ```text
 CaptureBatch
@@ -346,77 +392,48 @@ FlowFeatureBatch
    ↓
 FeatureSchemaValidator
    ↓
-Preprocessor
+Preprocessor persistido
    ↓
 BinaryPredictor
    ↓
 Defender
 ```
 
-## 4.1 Capture
+## 7.1 Capture
 
-`Capture` produz uma representação neutra dos pacotes observados.
+`Capture` produz registros neutros dos pacotes observados.
 
-O restante do pipeline não depende diretamente de Scapy.
+O restante do pipeline não depende diretamente da implementação concreta de captura.
 
-## 4.2 Extractor
+## 7.2 Extractor
 
-O Extractor agrupa os registros observados e reconstrói as features necessárias.
-
-A saída inclui:
+O Extractor reconstrói features de fluxo e retorna:
 
 - matriz `X`;
 - nomes das features;
-- identificadores dos fluxos;
-- features que não puderam ser reconstruídas;
-- metadados da extração.
+- IDs dos fluxos;
+- metadados;
+- informação sobre cobertura/reconstrução.
 
-## 4.3 Compatibilidade antes da inferência
+## 7.3 Schema
 
-O Defender não recebe automaticamente qualquer vetor reconstruído.
-
-Primeiro a arquitetura verifica:
+Antes de inferir, o pipeline verifica compatibilidade com o schema esperado.
 
 ```text
 features esperadas == features observadas
 ordem esperada      == ordem observada
-nenhuma feature ausente
-nenhuma feature extra
-nenhuma feature não suportada
-valores finitos
+valores              finitos
 ```
 
-Se o schema não for exatamente compatível, a inferência é interrompida.
+A cobertura estrutural do `BasicFlowExtractor` no schema atual é de 77/77 features esperadas.
 
-## 4.4 Normalização e classificação
-
-Somente após a validação:
-
-```text
-features reconstruídas
-      ↓
-preprocessador persistido
-      ↓
-features normalizadas
-      ↓
-Defender
-      ↓
-probabilidade + classe
-```
-
-A cobertura estrutural atual do `BasicFlowExtractor` é:
-
-```text
-77 / 77 features esperadas
-```
-
-Essa cobertura representa compatibilidade de schema, não uma afirmação de paridade numérica total com o CICFlowMeter.
+Isso significa cobertura estrutural do vetor, não equivalência numérica comprovada com o CICFlowMeter.
 
 ---
 
-# 5. Controle defensivo
+# 8. Controle defensivo
 
-A ADArena separa explicitamente detecção, decisão e resposta.
+A resposta é separada da detecção.
 
 ```text
 Defender
@@ -426,9 +443,9 @@ DecisionPolicy
 RuleEnforcer
 ```
 
-## 5.1 `ThresholdDecisionPolicy`
+## 8.1 ThresholdDecisionPolicy
 
-A política recebe:
+Recebe:
 
 ```text
 flow_id
@@ -436,203 +453,79 @@ prediction
 score
 ```
 
-e produz uma `Decision`.
+e produz uma decisão.
 
-Com threshold `τ`:
+Conceitualmente:
 
 ```text
-score < τ
+score < threshold
    ↓
 NONE
 
-score >= τ
+score >= threshold
    ↓
 BLOCK
 ```
 
-## 5.2 `DryRunRuleEnforcer`
+## 8.2 DryRunRuleEnforcer
 
-O enforcer atual nunca altera o plano de dados.
-
-Ele registra o resultado como:
+O enforcer atual registra a ação sem alterar o plano de dados.
 
 ```text
-success = True
-applied = False
-dry_run = True
+success = true
+applied = false
+dry_run = true
 ```
 
-para decisões processadas corretamente.
-
-Isso permite validar o contrato do controle sem exigir enforcement real.
-
-## 5.3 `ControlPipeline`
-
-```text
-NetworkInferenceResult
-      ↓
-DecisionPolicy
-      ↓
-Decision[]
-      ↓
-RuleEnforcer
-      ↓
-EnforcementResult[]
-```
-
-O resultado expõe, entre outros:
-
-```text
-n_flows
-block_count
-applied_count
-```
-
-## 5.4 `ControlledObservationPipeline`
-
-Une inferência e controle:
-
-```text
-CaptureBatch
-      ↓
-NetworkInferencePipeline
-      ↓
-ControlPipeline
-      ↓
-ControlledObservationResult
-```
-
-O caminho foi validado sinteticamente com os dois ramos:
-
-```text
-NONE
-BLOCK
-```
-
-O ramo `BLOCK` sintético continua em `dry-run`, portanto:
-
-```text
-applied = False
-```
+Essa separação permite testar a lógica de controle sem depender de enforcement real.
 
 ---
 
-# 6. `NetworkObservationPipeline`
+# 9. OBSERVE
 
-O `NetworkObservationPipeline` permanece como caminho ligado a uma execução de backend.
-
-```text
-Capture.start()
-      ↓
-Backend.execute_many(...)
-      ↓
-Capture.stop()
-      ↓
-NetworkInferencePipeline.infer(...)
-```
-
-A captura começa antes do backend para observar o tráfego correspondente à mesma unidade experimental.
-
-Esse pipeline continua útil para testes sintéticos/fakes e futuras execuções controladas.
-
-Ele não é o mecanismo principal para observar o tráfego benigno já existente no laboratório.
-
----
-
-# 7. `NetworkObservationProtocol`
-
-A observação física passiva é implementada por `NetworkObservationProtocol`.
+`NetworkObservationProtocol` fecha o caminho físico defensivo.
 
 ```text
 tráfego já existente
         ↓
 Capture.capture(...)
         ↓
-NetworkInferencePipeline
+Extractor
         ↓
-Defender
+FeatureSchemaValidator
         ↓
-ControlPipeline
+Preprocessor persistido
+        ↓
+Defender persistido
+        ↓
+DecisionPolicy
         ↓
 DryRunRuleEnforcer
         ↓
 ProtocolResult
 ```
 
-## 7.1 Requisitos
+Requisitos:
 
-`OBSERVE` exige:
-
-- Defender com `source`;
+- Defender com checkpoint;
 - preprocessador persistido;
-- `Capture`;
-- `Extractor`;
-- `dry_run=True`.
+- Capture;
+- Extractor.
 
-Ele **não exige**:
+Não exige:
 
 - Attacker;
 - Dataset;
 - Renderer;
 - NetworkBackend.
 
-## 7.2 Preparação pelo Runner
-
-```text
-ExperimentRunner
-      ↓
-ExperimentMode.OBSERVE
-      ↓
-Preprocessador.carregar(...)
-      ↓
-ProtocolContext
-```
-
-O Runner não carrega dataset, não cria split e não reajusta o scaler.
-
-## 7.3 Captura
-
-O protocolo chama:
-
-```text
-Capture.capture(
-    duration=capture_duration,
-    packet_limit=packet_limit
-)
-```
-
-Depois entrega o `CaptureBatch` ao pipeline controlado.
-
-## 7.4 Resultado
-
-O protocolo registra:
-
-- quantidade de pacotes capturados;
-- fluxos reconstruídos;
-- quantidade classificada como ataque;
-- quantidade classificada como benigno;
-- taxa de ataque observada;
-- decisões `BLOCK`;
-- regras efetivamente aplicadas;
-- threshold;
-- duração de captura;
-- `packet_limit`;
-- estado `dry_run`.
-
-Também preserva:
-
-- `flow_ids`;
-- probabilidades;
-- predições;
-- decisões;
-- resultados do enforcer;
-- metadados da captura.
+O tráfego observado pode ser simplesmente o tráfego benigno já produzido pelo laboratório.
 
 ---
 
-# 8. Fluxo físico validado
+# 10. Fluxo físico validado
 
-A integração física foi validada no laboratório Docker.
+A integração foi validada sobre a rede Docker do laboratório.
 
 ```text
 h1 ─┐
@@ -654,104 +547,205 @@ h4 ─┘                         │
                     DryRunRuleEnforcer
 ```
 
-A primeira captura física não precisou envolver tráfego malicioso.
+Em validações físicas recentes, o pipeline capturou tráfego IP existente, reconstruiu flows e classificou o tráfego benigno sem aplicar regras reais.
 
-Os hosts `h1`–`h4` já produzem tráfego HTTP benigno contra `h-target`.
+A interface `veth` deve ser descoberta novamente quando a topologia Docker for recriada, pois seu nome não é permanente.
 
-## 8.1 Smoke físico final
+---
 
-Execução de 21/09/2026:
+# 11. NetworkObservationPipeline com backend
+
+Existe também um pipeline que liga uma execução de backend à observação da mesma unidade experimental:
 
 ```text
-run:
-run_20260921_090931_seed42
-
-interface:
-veth91eb7b2
-
-captura:
-180 pacotes IP
-
-duração:
-5 s
-
-fluxos reconstruídos:
-15
+Capture.start()
+      ↓
+Backend.execute_many(...)
+      ↓
+Capture.stop()
+      ↓
+NetworkInferencePipeline
 ```
 
-Classificação:
+Na linha atual ele é particularmente útil para testes sintéticos/fakes do contrato.
+
+Ele não deve ser confundido com `OBSERVE`, cujo objetivo é observar passivamente tráfego já existente.
+
+---
+
+# 12. Testes sintéticos e componentes fake
+
+A suíte automatizada substitui componentes físicos por fakes quando isso torna o teste mais determinístico.
+
+Exemplo:
 
 ```text
-0 ataque
-15 benigno
+Renderer
+   ↓
+FakeNetworkBackend
+   ↓
+NetworkResult conhecido
 ```
 
-Controle:
+ou:
 
 ```text
-0 decisões BLOCK
-0 regras aplicadas
-dry_run = true
-```
-
-O resultado confirma fisicamente:
-
-```text
-Docker
-  ↓
-Capture
-  ↓
+Capture fake
+   ↓
 Extractor
-  ↓
-77 features
-  ↓
-Preprocessor persistido
-  ↓
-Defender persistido
-  ↓
+   ↓
+Predictor controlado
+   ↓
 DecisionPolicy
-  ↓
+   ↓
 DryRunRuleEnforcer
 ```
 
----
+Isso permite validar:
 
-# 9. Artefatos de `OBSERVE`
+- contratos;
+- compatibilidade;
+- tratamento de erros;
+- ramo `NONE`;
+- ramo `BLOCK`;
+- propagação de resultados.
 
-O run físico gerou:
-
-```text
-models/network-observe-smoke/experiments/
-└── run_20260921_090931_seed42/
-    ├── config_execucao.json
-    ├── preprocessador/
-    ├── metrics/
-    │   ├── network_observation.json
-    │   └── network_observation_evaluations.json
-    └── logs/
-        └── train.log
-```
-
-`train.log` é atualmente apenas um nome legado do arquivo de log.
-
-Uma melhoria futura da ferramenta é renomeá-lo para:
-
-```text
-run.log
-```
-
-para representar igualmente `TRAIN`, `SIMULATE` e `OBSERVE`.
+Esses testes não representam um quarto modo público.
 
 ---
 
-# 10. Relação entre os fluxos
+# 13. Níveis de validação
 
-A arquitetura atual pode ser resumida assim:
+A nomenclatura recomendada é:
 
 ```text
-TREINAMENTO
-===========
+UNIT / SYNTHETIC TEST
+  componentes isolados ou fakes
+  objetivo: validar contratos
 
+SMOKE
+  execução reduzida
+  objetivo: validar integração do software
+
+TRAIN
+  treinamento experimental
+  objetivo: produzir e avaliar modelos
+
+SIMULATE
+  feature-space → backend dry-run
+  objetivo: validar tradução/materialização
+
+OBSERVE
+  rede física/passiva → modelo → controle dry-run
+  objetivo: validar o caminho físico defensivo
+```
+
+Uma mesma execução pode ser um smoke e, ao mesmo tempo, usar o modo `TRAIN`.
+
+---
+
+# 14. Reprodutibilidade
+
+Existem duas representações importantes da configuração.
+
+## 14.1 TOML
+
+O TOML representa o experimento solicitado.
+
+Ele pode ser:
+
+```text
+escrito manualmente
+ou
+gerado pelo TUI Builder
+```
+
+e reutilizado pela CLI ou pela TUI.
+
+## 14.2 config_execucao.json
+
+Cada run registra um snapshot efetivo em:
+
+```text
+config_execucao.json
+```
+
+Ele preserva, conforme aplicável:
+
+- modo;
+- seed;
+- componentes;
+- checkpoints;
+- parâmetros;
+- preprocessador;
+- configuração de rede;
+- threshold;
+- metadados do run.
+
+O objetivo é não depender de estado implícito da máquina para interpretar o resultado depois.
+
+---
+
+# 15. Extensibilidade para outros ataques
+
+A arquitetura foi construída para permitir novos domínios sem alterar o Core toda vez.
+
+O objetivo é:
+
+```text
+novo ataque
+   ↓
+novos Dataset / modelos / adapters
+   ↓
+mesmo Registry
+mesmo ExperimentConfig
+mesmo ExperimentRunner
+mesmas interfaces
+```
+
+Mas isso não significa:
+
+```text
+"qualquer dataset pode ser colocado e funcionará automaticamente"
+```
+
+A compatibilidade depende das representações declaradas pelos componentes.
+
+Um novo cenário baseado em `FLOW_FEATURES` pode reutilizar parte maior do pipeline atual.
+
+Um domínio diferente pode exigir novas representações e componentes.
+
+Exemplo conceitual:
+
+```text
+Dataset de rede
+   ↓ FLOW_FEATURES
+Attacker
+   ↓ FLOW_FEATURES
+Defender
+```
+
+Outro domínio poderia futuramente usar:
+
+```text
+Dataset
+   ↓ TEXT / PROMPT / outra representação
+Attacker específico
+   ↓
+Defender específico
+```
+
+Essas representações adicionais não fazem parte dos built-ins atuais.
+
+O critério arquitetural de sucesso é que a extensão aconteça principalmente nas bordas — Dataset, modelos, Renderer/Extractor e representações — sem reescrever o orquestrador central.
+
+---
+
+# 16. Relação entre os fluxos
+
+```text
+TRAIN
+=====
 Dataset
    ↓
 Attacker ↔ Defender
@@ -759,9 +753,8 @@ Attacker ↔ Defender
 checkpoints
 
 
-SIMULAÇÃO
-=========
-
+SIMULATE
+========
 Dataset + checkpoints
    ↓
 Attacker
@@ -773,9 +766,8 @@ Renderer
 Backend dry-run
 
 
-OBSERVAÇÃO
-==========
-
+OBSERVE
+=======
 tráfego físico existente
    ↓
 Capture
@@ -793,174 +785,94 @@ DryRunRuleEnforcer
 
 Os caminhos são independentes por projeto.
 
-`SIMULATE` não precisa transmitir pacotes para validar o caminho de tradução.
+`SIMULATE` não precisa transmitir pacotes para validar tradução.
 
-`OBSERVE` não precisa de Attacker para validar o caminho físico de detecção e controle.
+`OBSERVE` não precisa de Attacker para validar detecção e controle.
 
----
-
-# 11. Feedback experimental
-
-O fechamento arquitetural não exige aprendizado online.
-
-O que já existe:
-
-```text
-feature-space
-    ↓
-Attacker
-    ↓
-Defender
-    ↓
-Renderer
-    ↓
-Backend dry-run
-```
-
-e:
-
-```text
-rede física
-    ↓
-Capture
-    ↓
-Extractor
-    ↓
-Defender
-    ↓
-controle
-```
-
-Esses caminhos permitem estudar separadamente:
-
-- evasão matemática;
-- traduzibilidade;
-- reconstrução de features;
-- comportamento do modelo sobre tráfego físico;
-- política de resposta;
-- resultado do enforcement.
-
-Uma futura extensão pode conectar uma materialização de rede controlada diretamente à observação física da mesma execução.
-
-Isso não é requisito para o fechamento atual da Frente 1.
+`TRAIN` não precisa da rede física para produzir checkpoints.
 
 ---
 
-# 12. Persistência e reprodutibilidade
+# 17. Estado da Frente 1
 
-Cada execução deve preservar contexto suficiente para ser interpretada posteriormente.
+A Frente 1 cobre a **construção da plataforma**, não a qualidade final dos modelos.
 
-O snapshot atual registra, entre outros:
-
-- modo de execução;
-- seed;
-- dataset e parâmetros quando aplicável;
-- Attacker e checkpoint quando aplicável;
-- Defender e checkpoint;
-- protocolo;
-- Renderer;
-- NetworkBackend;
-- Capture;
-- Extractor;
-- preprocessador de origem;
-- quantidade de amostras;
-- `capture_duration`;
-- threshold configurado e efetivo;
-- `packet_limit`;
-- `dry_run`;
-- estado de observação.
-
-Essa informação é armazenada em:
+Estado:
 
 ```text
-config_execucao.json
-```
-
-Em `OBSERVE`, elementos não utilizados aparecem explicitamente como `null`.
-
-O objetivo é separar claramente:
-
-```text
-resultado científico
-      de
-estado implícito da máquina / código
-```
-
----
-
-# 13. Estado da Frente 1
-
-```text
-[✓] Attacker / Defender
-[✓] Registry + Config + Runner
+[✓] Component contracts
+[✓] Registry
+[✓] ExperimentConfig
+[✓] ExperimentRunner
 [✓] Protocol abstraction
-[✓] Renderer + NetworkBackend
-[✓] Capture + Extractor
+
+[✓] Dataset adapter
+[✓] Renderer
+[✓] NetworkBackend
+[✓] Capture
+[✓] Extractor
+[✓] schema validation
+
 [✓] NetworkInferencePipeline
 [✓] DecisionPolicy
 [✓] RuleEnforcer dry-run
 [✓] ControlPipeline
-[✓] ControlledObservationPipeline
-[✓] Docker network operacional
-[✓] captura física passiva
-[✓] rede → features
-[✓] rede → Defender
-[✓] Defender → Policy → Enforcer
 [✓] NetworkObservationProtocol
-[✓] OBSERVE via ExperimentRunner
-[✓] resultado físico registrado em artefatos
+
+[✓] TRAIN
+[✓] SIMULATE dry-run
+[✓] OBSERVE passivo
+[✓] validação física em Docker
+
+[✓] CLI
+[✓] TUI
+[✓] TUI Builder
+[✓] seleção de componentes via Registry
+[✓] configuração de parâmetros
+[✓] salvar/recarregar TOML
+[✓] inspeção de runs
+[✓] logging por run
+[✓] testes automatizados
+[✓] documentação de uso e fluxo
 ```
 
-Validação automatizada atual:
+A plataforma pode continuar recebendo melhorias incrementais, mas essas melhorias não impedem o encerramento da Frente 1.
 
-```text
-98 testes passando
-```
+Não fazem parte do fechamento atual:
 
-A Frente 1 está concluída.
+- enforcement SDN real;
+- aprendizado online;
+- integração obrigatória com OVS/OS-Ken;
+- suporte pronto e automático a qualquer domínio de ataque;
+- qualidade científica final dos modelos.
 
-Enforcement SDN real, aprendizado online e integração com OVS/OS-Ken são extensões futuras, não requisitos pendentes dessa frente.
+Esses pontos pertencem a extensões futuras ou às próximas frentes.
 
 ---
 
-# 14. Próxima frente
+# 18. Próxima frente
 
-Com a arquitetura fechada, o trabalho passa para acabamento da ferramenta:
+Com a plataforma fechada, a atenção passa para os **modelos e experimentos científicos**.
 
-```text
-CLI
- ↓
-configuração amigável
- ↓
-logging
- ↓
-erros e validações
- ↓
-empacotamento
- ↓
-documentação de uso
-```
+Questões naturais da próxima etapa:
 
-Pontos específicos:
-
-- comandos para `train`, `simulate` e `observe`;
-- listagem de componentes registrados;
-- padronização do log para `run.log`;
-- melhoria das mensagens de erro;
-- redução da dependência de `PYTHONPATH`;
-- documentação em `usage.md`;
-- tratamento explícito de código legado.
+- substituir/evoluir os modelos atuais;
+- estudar o comportamento competitivo Attacker × Defender;
+- definir experimentos reproduzíveis;
+- testar generalização;
+- verificar quanto da arquitetura é reutilizado ao introduzir outro cenário;
+- separar resultados de engenharia dos resultados científicos.
 
 ---
 
-# 15. Documentação histórica
+# 19. Documentação histórica
 
-Resultados antigos não devem ser usados para descrever o comportamento atual da ADArena.
-
-Documentos como:
+Documentos em:
 
 ```text
-docs/history/resultados_v1_7.md
+docs/history/
 ```
 
-existem para registrar a evolução da pesquisa, incluindo limitações e resultados que já foram superados ou alterados por novas versões da arquitetura.
+registram estados anteriores da pesquisa.
+
+Eles não devem ser utilizados como descrição da implementação atual quando houver conflito com `architecture.md`, `flow.md` ou `usage.md`.
