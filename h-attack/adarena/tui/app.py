@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from pathlib import Path
 from typing import Any
 
@@ -54,8 +56,14 @@ from adarena.tui.builder import (
     BuilderValues,
     build_experiment_config,
     component_options,
-    first_component_id,
     preferred_protocol_id,
+)
+from adarena.tui.resources import (
+    attacker_checkpoint_options,
+    dataset_options as dataset_file_options,
+    defender_checkpoint_options,
+    inspect_run_resources,
+    training_run_options,
 )
 
 
@@ -375,6 +383,18 @@ class ADArenaTUI(App):
             )
         )
 
+        dataset_files = (
+            dataset_file_options(
+                "data"
+            )
+        )
+
+        source_runs = (
+            training_run_options(
+                self.models_root
+            )
+        )
+
         with VerticalScroll(
             id="builder-scroll"
         ):
@@ -464,12 +484,12 @@ class ADArenaTUI(App):
                     "Arquivo do dataset",
                     classes="field-label",
                 )
-                yield Input(
-                    value=(
-                        "data/"
-                        "DDoS-Friday-no-metadata.parquet"
-                    ),
+                yield self._resource_select(
+                    dataset_files,
                     id="builder-dataset-source",
+                    empty_label=(
+                        "Nenhum arquivo encontrado em data/"
+                    ),
                 )
 
                 yield Static(
@@ -682,15 +702,35 @@ class ADArenaTUI(App):
                 )
 
                 yield Static(
+                    "Run de origem",
+                    classes="field-label",
+                )
+                yield self._resource_select(
+                    source_runs,
+                    id="builder-source-run",
+                    empty_label=(
+                        "Nenhum TRAIN encontrado"
+                    ),
+                )
+
+                yield Static(
+                    (
+                        "O run fornece checkpoints e "
+                        "preprocessador para a execução."
+                    ),
+                    classes="hint",
+                )
+
+                yield Static(
                     "Checkpoint do Defender",
                     classes="field-label",
                 )
-                yield Input(
-                    placeholder=(
-                        "models/.../"
-                        "defensor_adaptativo_final.pth"
-                    ),
+                yield self._resource_select(
+                    [],
                     id="builder-defender-source",
+                    empty_label=(
+                        "Selecione um run"
+                    ),
                 )
 
                 yield Static(
@@ -698,9 +738,11 @@ class ADArenaTUI(App):
                     classes="field-label",
                 )
                 yield Input(
+                    value="",
                     placeholder=(
-                        "models/.../preprocessador"
+                        "preenchido automaticamente"
                     ),
+                    disabled=True,
                     id="builder-preprocessor-source",
                 )
 
@@ -761,11 +803,12 @@ class ADArenaTUI(App):
                     "Checkpoint do Attacker",
                     classes="field-label",
                 )
-                yield Input(
-                    placeholder=(
-                        "models/.../atacante_final.pth"
-                    ),
+                yield self._resource_select(
+                    [],
                     id="builder-attacker-source",
+                    empty_label=(
+                        "Selecione um run"
+                    ),
                 )
 
                 yield Static(
@@ -974,6 +1017,43 @@ class ADArenaTUI(App):
             id=id,
         )
 
+    def _resource_select(
+        self,
+        options: list[
+            tuple[str, str]
+        ],
+        *,
+        id: str,
+        empty_label: str,
+    ) -> Select:
+        """
+        Select usado para recursos descobertos no filesystem.
+
+        Diferente de _select(), estes valores não são componentes
+        do Registry: são datasets, runs ou checkpoints.
+        """
+
+        if not options:
+            return Select(
+                [
+                    (
+                        empty_label,
+                        "",
+                    )
+                ],
+                value="",
+                allow_blank=False,
+                disabled=True,
+                id=id,
+            )
+
+        return Select(
+            options,
+            value=options[0][1],
+            allow_blank=False,
+            id=id,
+        )
+
     # ------------------------------------------------------------------
     # Inicialização / refresh
     # ------------------------------------------------------------------
@@ -1027,6 +1107,7 @@ class ADArenaTUI(App):
         self._refresh_runs()
         self._refresh_components()
         self._refresh_dashboard()
+        self._refresh_builder_resources()
 
     def _refresh_configs(
         self,
@@ -1188,22 +1269,40 @@ class ADArenaTUI(App):
         self,
         event: Select.Changed,
     ) -> None:
-        if (
+        select_id = (
             event.select.id
-            != "builder-mode"
-        ):
-            return
-
-        try:
-            mode = ExperimentMode(
-                str(event.value)
-            )
-        except ValueError:
-            return
-
-        self._apply_builder_mode(
-            mode
         )
+
+        if (
+            select_id
+            == "builder-mode"
+        ):
+            try:
+                mode = ExperimentMode(
+                    str(
+                        event.value
+                    )
+                )
+            except ValueError:
+                return
+
+            self._apply_builder_mode(
+                mode
+            )
+
+            if mode in {
+                ExperimentMode.SIMULATE,
+                ExperimentMode.OBSERVE,
+            }:
+                self._sync_source_run()
+
+            return
+
+        if (
+            select_id
+            == "builder-source-run"
+        ):
+            self._sync_source_run()
 
     def _apply_builder_mode(
         self,
@@ -1282,6 +1381,212 @@ class ADArenaTUI(App):
             mode_notes[mode],
         )
 
+    def _sync_source_run(
+        self,
+    ) -> None:
+        """
+        Atualiza checkpoints e preprocessador de acordo com
+        o TRAIN selecionado pelo usuário.
+        """
+
+        run_dir = (
+            self._select_optional(
+                "#builder-source-run"
+            )
+        )
+
+        if not run_dir:
+            self._replace_resource_options(
+                "#builder-attacker-source",
+                [],
+                empty_label=(
+                    "Selecione um run"
+                ),
+            )
+
+            self._replace_resource_options(
+                "#builder-defender-source",
+                [],
+                empty_label=(
+                    "Selecione um run"
+                ),
+            )
+
+            self.query_one(
+                "#builder-preprocessor-source",
+                Input,
+            ).value = ""
+
+            return
+
+        try:
+            resources = (
+                inspect_run_resources(
+                    run_dir
+                )
+            )
+        except Exception as exc:
+            self._set_status(
+                "#builder-status",
+                (
+                    "[b]Run não pôde ser carregado[/b]\n"
+                    f"{exc}"
+                ),
+                error=True,
+            )
+            return
+
+        attacker_options = (
+            attacker_checkpoint_options(
+                resources
+            )
+        )
+
+        defender_options = (
+            defender_checkpoint_options(
+                resources
+            )
+        )
+
+        self._replace_resource_options(
+            "#builder-attacker-source",
+            attacker_options,
+            empty_label=(
+                "Nenhum checkpoint de Attacker"
+            ),
+        )
+
+        self._replace_resource_options(
+            "#builder-defender-source",
+            defender_options,
+            empty_label=(
+                "Nenhum checkpoint de Defender"
+            ),
+        )
+
+        preprocessor_input = (
+            self.query_one(
+                "#builder-preprocessor-source",
+                Input,
+            )
+        )
+
+        if (
+            resources.preprocessor
+            is not None
+        ):
+            preprocessor_input.value = str(
+                resources.preprocessor
+            )
+        else:
+            preprocessor_input.value = ""
+
+        self._set_status(
+            "#builder-status",
+            (
+                "[b]Run carregado[/b]\n"
+                f"{resources.record.run_id}\n"
+                f"Attacker checkpoints: "
+                f"{len(attacker_options)}\n"
+                f"Defender checkpoints: "
+                f"{len(defender_options)}\n"
+                f"Preprocessador: "
+                f"{'OK' if resources.preprocessor else 'ausente'}"
+            ),
+        )
+
+    def _replace_resource_options(
+        self,
+        selector: str,
+        options: list[
+            tuple[str, str]
+        ],
+        *,
+        empty_label: str,
+    ) -> None:
+        """
+        Atualiza dinamicamente um Select preservando a seleção
+        atual quando ela ainda existir.
+        """
+
+        select = self.query_one(
+            selector,
+            Select,
+        )
+
+        current = (
+            str(select.value)
+            if select.value is not None
+            else None
+        )
+
+        if not options:
+            select.set_options(
+                [
+                    (
+                        empty_label,
+                        "",
+                    )
+                ]
+            )
+            select.value = ""
+            select.disabled = True
+            return
+
+        select.disabled = False
+
+        select.set_options(
+            options
+        )
+
+        valid_values = {
+            value
+            for _, value
+            in options
+        }
+
+        if (
+            current
+            in valid_values
+        ):
+            select.value = current
+        else:
+            select.value = (
+                options[0][1]
+            )
+
+    def _refresh_builder_resources(
+        self,
+    ) -> None:
+        """
+        Atualiza datasets e runs encontrados.
+
+        Isso permite que um TRAIN recém-concluído apareça
+        imediatamente como origem de SIMULATE/OBSERVE.
+        """
+
+        self._replace_resource_options(
+            "#builder-dataset-source",
+            dataset_file_options(
+                "data"
+            ),
+            empty_label=(
+                "Nenhum arquivo encontrado em data/"
+            ),
+        )
+
+        self._replace_resource_options(
+            "#builder-source-run",
+            training_run_options(
+                self.models_root
+            ),
+            empty_label=(
+                "Nenhum TRAIN encontrado"
+            ),
+        )
+
+        self._sync_source_run()
+
     def _builder_values(
         self,
     ) -> BuilderValues:
@@ -1306,7 +1611,7 @@ class ADArenaTUI(App):
                 else None
             ),
             dataset_source=(
-                self._input_value(
+                self._select_optional(
                     "#builder-dataset-source"
                 )
                 if (
@@ -1329,7 +1634,7 @@ class ADArenaTUI(App):
                 else None
             ),
             attacker_source=(
-                self._input_value(
+                self._select_optional(
                     "#builder-attacker-source"
                 )
                 if (
@@ -1346,7 +1651,7 @@ class ADArenaTUI(App):
                 )
             ),
             defender_source=(
-                self._input_value(
+                self._select_optional(
                     "#builder-defender-source"
                 )
                 if (
@@ -2024,6 +2329,21 @@ class ADArenaTUI(App):
             or "  -"
         )
 
+        important_artifacts = (
+            self._important_artifacts(
+                record.run_dir
+            )
+        )
+
+        important_text = (
+            "\n".join(
+                f"  {label}: {path}"
+                for label, path
+                in important_artifacts
+            )
+            or "  -"
+        )
+
         self.query_one(
             "#run-details",
             Static,
@@ -2040,10 +2360,94 @@ class ADArenaTUI(App):
                 f"Path: {record.run_dir}\n\n"
                 "[b]Components[/b]\n"
                 f"{component_lines}\n\n"
-                "[b]Artifacts[/b]\n"
-                f"{artifact_lines}"
+                "[b]Artifact counts[/b]\n"
+                f"{artifact_lines}\n\n"
+                "[b]Resultados importantes[/b]\n"
+                f"{important_text}"
             )
         )
+
+    @staticmethod
+    def _important_artifacts(
+        run_dir: Path,
+    ) -> list[tuple[str, str]]:
+        """
+        Lista artefatos úteis para inspeção humana do run.
+
+        A TUI apenas aponta para os arquivos persistidos; ela não
+        interpreta nem altera os resultados científicos.
+        """
+
+        candidates = (
+            (
+                "Config",
+                run_dir
+                / "config_execucao.json",
+            ),
+            (
+                "Summary",
+                run_dir
+                / "summary.json",
+            ),
+            (
+                "Histórico",
+                run_dir
+                / "historico_treino.json",
+            ),
+            (
+                "Matriz A×D",
+                run_dir
+                / "matriz_checkpoints.csv",
+            ),
+            (
+                "Log",
+                run_dir
+                / "logs"
+                / "run.log",
+            ),
+            (
+                "Observação",
+                run_dir
+                / "metrics"
+                / "network_observation.json",
+            ),
+        )
+
+        result: list[
+            tuple[str, str]
+        ] = []
+
+        for label, path in candidates:
+            if path.is_file():
+                result.append(
+                    (
+                        label,
+                        str(path),
+                    )
+                )
+
+        plots_dir = (
+            run_dir
+            / "plots"
+        )
+
+        if plots_dir.is_dir():
+            plot_count = sum(
+                1
+                for path
+                in plots_dir.iterdir()
+                if path.is_file()
+            )
+
+            if plot_count:
+                result.append(
+                    (
+                        f"Plots ({plot_count})",
+                        str(plots_dir),
+                    )
+                )
+
+        return result
 
     # ------------------------------------------------------------------
     # Resultado / parsing
@@ -2081,11 +2485,517 @@ class ADArenaTUI(App):
             Button,
         ).disabled = False
 
+        summary = (
+            self._format_result_summary(
+                result,
+                detailed=detailed,
+            )
+        )
+
+        self._set_status(
+            status_id,
+            (
+                "[b]Experimento concluído[/b]\n"
+                f"Run: {result.run_id}\n"
+                f"Artefatos: {result.run_dir}\n\n"
+                f"{summary}"
+            ),
+        )
+
+        self.refresh_data()
+
+    def _format_result_summary(
+        self,
+        result,
+        *,
+        detailed: bool,
+    ) -> str:
+        """
+        Apresenta o resultado de acordo com a semântica do modo.
+
+        A intenção é evitar reduzir TRAIN, SIMULATE e OBSERVE a uma
+        lista genérica de métricas escalares.
+        """
+
+        history = (
+            result.history
+            or {}
+        )
+
         metrics = (
             result.final_metrics
             or {}
         )
 
+        if (
+            history.get(
+                "taxa_evasao_pre_adaptacao"
+            )
+            or history.get(
+                "taxa_evasao_pos_adaptacao"
+            )
+        ):
+            return (
+                self._format_train_summary(
+                    result,
+                    detailed=detailed,
+                )
+            )
+
+        if (
+            "samples_selected"
+            in metrics
+            and "mathematical_evasions"
+            in metrics
+        ):
+            return (
+                self._format_simulate_summary(
+                    result,
+                    detailed=detailed,
+                )
+            )
+
+        if (
+            "captured_packets"
+            in metrics
+            and "reconstructed_flows"
+            in metrics
+        ):
+            return (
+                self._format_observe_summary(
+                    result,
+                    detailed=detailed,
+                )
+            )
+
+        return self._format_generic_metrics(
+            metrics,
+            detailed=detailed,
+        )
+
+    def _format_train_summary(
+        self,
+        result,
+        *,
+        detailed: bool,
+    ) -> str:
+        history = (
+            result.history
+            or {}
+        )
+
+        metrics = (
+            result.final_metrics
+            or {}
+        )
+
+        pre = list(
+            history.get(
+                "taxa_evasao_pre_adaptacao",
+                [],
+            )
+            or []
+        )
+
+        post = list(
+            history.get(
+                "taxa_evasao_pos_adaptacao",
+                [],
+            )
+            or []
+        )
+
+        round_count = max(
+            len(pre),
+            len(post),
+        )
+
+        lines = [
+            "[b]Evolução adversarial[/b]",
+        ]
+
+        selected_rounds = (
+            self._round_indexes(
+                round_count,
+                detailed=detailed,
+            )
+        )
+
+        previous = None
+
+        for index in selected_rounds:
+            if (
+                previous is not None
+                and index
+                > previous + 1
+            ):
+                lines.append(
+                    "  ..."
+                )
+
+            round_number = (
+                index + 1
+            )
+
+            pre_value = (
+                pre[index]
+                if index < len(pre)
+                else None
+            )
+
+            post_value = (
+                post[index]
+                if index < len(post)
+                else None
+            )
+
+            lines.append(
+                (
+                    f"  R{round_number:02d}: "
+                    f"A{round_number}×D{round_number - 1} "
+                    f"{self._percent(pre_value)} "
+                    "→ "
+                    f"A{round_number}×D{round_number} "
+                    f"{self._percent(post_value)}"
+                )
+            )
+
+            previous = index
+
+        if round_count == 0:
+            lines.append(
+                "  histórico por rodada indisponível"
+            )
+
+        lines.extend(
+            [
+                "",
+                "[b]Defender final — teste reservado[/b]",
+                (
+                    "  Acc: "
+                    f"{self._metric_percent(metrics, 'accuracy')} | "
+                    "Precision: "
+                    f"{self._metric_percent(metrics, 'precision')} | "
+                    "Recall: "
+                    f"{self._metric_percent(metrics, 'recall')}"
+                ),
+                (
+                    "  F1: "
+                    f"{self._metric_percent(metrics, 'f1')} | "
+                    "FPR: "
+                    f"{self._metric_percent(metrics, 'fpr')} | "
+                    "FNR: "
+                    f"{self._metric_percent(metrics, 'fnr')}"
+                ),
+                (
+                    "  ROC-AUC: "
+                    f"{self._metric_number(metrics, 'roc_auc')}"
+                ),
+            ]
+        )
+
+        artifacts = (
+            self._important_artifacts(
+                Path(result.run_dir)
+            )
+        )
+
+        if artifacts:
+            lines.extend(
+                [
+                    "",
+                    "[b]Resultados persistidos[/b]",
+                ]
+            )
+
+            for label, path in artifacts:
+                if label.startswith(
+                    (
+                        "Histórico",
+                        "Matriz",
+                        "Plots",
+                        "Summary",
+                    )
+                ):
+                    lines.append(
+                        f"  {label}: {path}"
+                    )
+
+        return "\n".join(
+            lines
+        )
+
+    def _format_simulate_summary(
+        self,
+        result,
+        *,
+        detailed: bool,
+    ) -> str:
+        metrics = (
+            result.final_metrics
+            or {}
+        )
+
+        snapshot = (
+            self._load_run_snapshot(
+                Path(result.run_dir)
+            )
+        )
+
+        confrontation = (
+            self._confrontation_label(
+                snapshot
+            )
+        )
+
+        samples = int(
+            metrics.get(
+                "samples_selected",
+                0,
+            )
+            or 0
+        )
+
+        evasions = int(
+            metrics.get(
+                "mathematical_evasions",
+                0,
+            )
+            or 0
+        )
+
+        valid = int(
+            metrics.get(
+                "valid_renderings",
+                0,
+            )
+            or 0
+        )
+
+        executions = int(
+            metrics.get(
+                "dry_run_executions",
+                0,
+            )
+            or 0
+        )
+
+        evasion_rate = float(
+            metrics.get(
+                "mathematical_evasion_rate",
+                0.0,
+            )
+            or 0.0
+        )
+
+        valid_given_evasion = float(
+            metrics.get(
+                "valid_rendering_rate_given_evasion",
+                0.0,
+            )
+            or 0.0
+        )
+
+        lines = [
+            "[b]Cenário de simulação[/b]",
+            f"  Confronto: {confrontation}",
+            "",
+            "[b]Funil[/b]",
+            f"  {samples} amostras selecionadas",
+            (
+                "       ↓ "
+                f"{evasion_rate * 100:.2f}%"
+            ),
+            f"  {evasions} evasões matemáticas",
+            (
+                "       ↓ "
+                f"{valid_given_evasion * 100:.2f}% das evasões"
+            ),
+            f"  {valid} traduções válidas",
+            "       ↓",
+            f"  {executions} execuções dry-run",
+        ]
+
+        if detailed:
+            lines.extend(
+                [
+                    "",
+                    "[b]Parâmetros[/b]",
+                    (
+                        "  Threshold: "
+                        f"{self._metric_number(metrics, 'classification_threshold')}"
+                    ),
+                    (
+                        "  Epsilon: "
+                        f"{self._metric_number(metrics, 'epsilon')}"
+                    ),
+                    (
+                        "  Taxa de traduções no total: "
+                        f"{self._metric_percent(metrics, 'valid_rendering_rate')}"
+                    ),
+                    (
+                        "  Dry-run: "
+                        f"{metrics.get('dry_run', True)}"
+                    ),
+                ]
+            )
+
+        return "\n".join(
+            lines
+        )
+
+    def _format_observe_summary(
+        self,
+        result,
+        *,
+        detailed: bool,
+    ) -> str:
+        metrics = (
+            result.final_metrics
+            or {}
+        )
+
+        packets = metrics.get(
+            "captured_packets",
+            0,
+        )
+        flows = metrics.get(
+            "reconstructed_flows",
+            0,
+        )
+        benign = metrics.get(
+            "network_benign_count",
+            0,
+        )
+        attacks = metrics.get(
+            "network_attack_count",
+            0,
+        )
+        blocks = metrics.get(
+            "block_decisions",
+            0,
+        )
+        applied = metrics.get(
+            "rules_applied",
+            0,
+        )
+
+        lines = [
+            "[b]Observação passiva[/b]",
+            f"  Pacotes capturados: {packets}",
+            f"  Fluxos reconstruídos: {flows}",
+            "",
+            "[b]Classificação[/b]",
+            f"  Benignos: {benign}",
+            f"  Ataques: {attacks}",
+            (
+                "  Taxa de ataque: "
+                f"{self._metric_percent(metrics, 'network_attack_rate')}"
+            ),
+            "",
+            "[b]Controle[/b]",
+            f"  Decisões BLOCK: {blocks}",
+            f"  Regras aplicadas: {applied}",
+            "  Enforcement: dry-run",
+        ]
+
+        if detailed:
+            lines.extend(
+                [
+                    "",
+                    "[b]Captura[/b]",
+                    (
+                        "  Duração: "
+                        f"{self._metric_number(metrics, 'capture_duration')} s"
+                    ),
+                    (
+                        "  Packet limit: "
+                        f"{metrics.get('packet_limit', '-')}"
+                    ),
+                    (
+                        "  Threshold: "
+                        f"{self._metric_number(metrics, 'classification_threshold')}"
+                    ),
+                ]
+            )
+
+        return "\n".join(
+            lines
+        )
+
+    @staticmethod
+    def _round_indexes(
+        count: int,
+        *,
+        detailed: bool,
+    ) -> list[int]:
+        if count <= 0:
+            return []
+
+        if detailed or count <= 7:
+            return list(
+                range(count)
+            )
+
+        indexes = [
+            0,
+            1,
+            2,
+            count - 2,
+            count - 1,
+        ]
+
+        return sorted(
+            set(indexes)
+        )
+
+    @staticmethod
+    def _percent(
+        value: Any,
+    ) -> str:
+        if not isinstance(
+            value,
+            (int, float),
+        ):
+            return "-"
+
+        return f"{float(value) * 100:.2f}%"
+
+    def _metric_percent(
+        self,
+        metrics: dict,
+        key: str,
+    ) -> str:
+        return self._percent(
+            metrics.get(key)
+        )
+
+    @staticmethod
+    def _metric_number(
+        metrics: dict,
+        key: str,
+    ) -> str:
+        value = metrics.get(
+            key
+        )
+
+        if isinstance(
+            value,
+            float,
+        ):
+            return f"{value:.6g}"
+
+        if value is None:
+            return "-"
+
+        return str(value)
+
+    @staticmethod
+    def _format_generic_metrics(
+        metrics: dict,
+        *,
+        detailed: bool,
+    ) -> str:
         metric_lines = []
 
         for key, value in metrics.items():
@@ -2108,24 +3018,175 @@ class ADArenaTUI(App):
             else 8
         )
 
-        metrics_text = (
+        return (
             "\n".join(
                 metric_lines[:limit]
             )
             or "(sem métricas escalares)"
         )
 
-        self._set_status(
-            status_id,
-            (
-                "[b]Experimento concluído[/b]\n"
-                f"Run: {result.run_id}\n"
-                f"Artefatos: {result.run_dir}\n\n"
-                f"{metrics_text}"
-            ),
+    @staticmethod
+    def _load_run_snapshot(
+        run_dir: Path,
+    ) -> dict[str, Any]:
+        path = (
+            run_dir
+            / "config_execucao.json"
         )
 
-        self.refresh_data()
+        if not path.is_file():
+            return {}
+
+        try:
+            with open(
+                path,
+                encoding="utf-8",
+            ) as file:
+                payload = json.load(
+                    file
+                )
+        except (
+            OSError,
+            json.JSONDecodeError,
+            TypeError,
+            ValueError,
+        ):
+            return {}
+
+        return (
+            payload
+            if isinstance(
+                payload,
+                dict,
+            )
+            else {}
+        )
+
+    def _confrontation_label(
+        self,
+        snapshot: dict[str, Any],
+    ) -> str:
+        configs = snapshot.get(
+            "component_config",
+            {}
+        )
+
+        if not isinstance(
+            configs,
+            dict,
+        ):
+            return "checkpoint selecionado"
+
+        attacker = configs.get(
+            "attacker"
+        )
+        defender = configs.get(
+            "defender"
+        )
+
+        attacker_source = (
+            attacker.get("source")
+            if isinstance(
+                attacker,
+                dict,
+            )
+            else None
+        )
+
+        defender_source = (
+            defender.get("source")
+            if isinstance(
+                defender,
+                dict,
+            )
+            else None
+        )
+
+        attacker_label = (
+            self._checkpoint_label(
+                attacker_source,
+                role="attacker",
+            )
+        )
+
+        defender_label = (
+            self._checkpoint_label(
+                defender_source,
+                role="defender",
+            )
+        )
+
+        if (
+            attacker_label
+            and defender_label
+        ):
+            return (
+                f"{attacker_label} × "
+                f"{defender_label}"
+            )
+
+        return "checkpoint selecionado"
+
+    @staticmethod
+    def _checkpoint_label(
+        source: Any,
+        *,
+        role: str,
+    ) -> str | None:
+        if not isinstance(
+            source,
+            str,
+        ):
+            return None
+
+        stem = (
+            Path(source)
+            .stem
+            .lower()
+        )
+
+        if role == "attacker":
+            if stem in {
+                "atacante_final",
+                "attacker_final",
+            }:
+                return "Afinal"
+
+            marker = "_rodada_"
+
+            if marker in stem:
+                raw = stem.rsplit(
+                    marker,
+                    1,
+                )[1]
+
+                try:
+                    return f"A{int(raw)}"
+                except ValueError:
+                    pass
+
+        if role == "defender":
+            if stem in {
+                "defensor_adaptativo_final",
+                "defensor_final",
+                "defender_final",
+            }:
+                return "Dfinal"
+
+            marker = "_rodada_"
+
+            if marker in stem:
+                raw = stem.rsplit(
+                    marker,
+                    1,
+                )[1]
+
+                try:
+                    return f"D{int(raw)}"
+                except ValueError:
+                    pass
+
+        return Path(source).name
 
     def _set_status(
         self,

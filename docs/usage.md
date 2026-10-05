@@ -111,6 +111,8 @@ selecionar modo
       ↓
 selecionar componentes
       ↓
+selecionar recursos descobertos
+      ↓
 configurar parâmetros
       ↓
 Validar
@@ -120,37 +122,63 @@ Validar
 
 Os componentes apresentados nos seletores são obtidos do `ComponentRegistry`. Portanto, a interface não mantém uma lista manual de nomes concretos de Dataset, Attacker ou Defender.
 
+A TUI também descobre recursos já existentes no filesystem para evitar que o usuário precise digitar caminhos internos manualmente.
+
+Para `TRAIN`, os arquivos disponíveis abaixo de:
+
+```text
+data/
+```
+
+são apresentados em um seletor de dataset.
+
+Para `SIMULATE` e `OBSERVE`, a TUI lista runs de treinamento encontrados abaixo do diretório de modelos. Depois que um run é selecionado, a interface descobre automaticamente:
+
+```text
+checkpoints do Attacker
+checkpoints do Defender
+preprocessador persistido
+```
+
+O preprocessador é preenchido automaticamente a partir do run escolhido.
+
 Dependendo do modo, a interface apresenta apenas os grupos relevantes.
 
 ```text
 TRAIN
-  Dataset
+  Dataset adapter
+  Arquivo do dataset
   Attacker
   Defender
   Protocol
   parâmetros de treinamento
 
 SIMULATE
-  Dataset
-  Attacker + checkpoint
-  Defender + checkpoint
+  Dataset adapter
+  Arquivo do dataset
+  Run de origem
+  Attacker checkpoint
+  Defender checkpoint
+  Preprocessador persistido
   Protocol
   Renderer
   NetworkBackend
   Capture
   Extractor
-  preprocessador persistido
   parâmetros da simulação
   dry-run obrigatório
 
 OBSERVE
-  Defender + checkpoint
+  Run de origem
+  Defender checkpoint
+  Preprocessador persistido
   Protocol
   Capture
   Extractor
-  preprocessador persistido
   parâmetros da captura
 ```
+
+A escolha do run de origem não altera a lógica experimental. Ela apenas resolve, de forma mais amigável, os caminhos persistidos que já seriam usados no `ExperimentConfig`.
 
 `OBSERVE` não exige Dataset nem Attacker.
 
@@ -203,9 +231,24 @@ Ao selecionar um run, são exibidos:
 - data de criação;
 - seed;
 - propósito;
-- caminho dos artefatos;
+- caminho do run;
 - componentes utilizados;
-- quantidade de arquivos em cada grupo de artefatos.
+- quantidade de arquivos em cada grupo de artefatos;
+- caminhos para resultados importantes, quando existirem.
+
+Entre os resultados destacados podem aparecer:
+
+```text
+config_execucao.json
+summary.json
+historico_treino.json
+matriz_checkpoints.csv
+logs/run.log
+metrics/network_observation.json
+plots/
+```
+
+A TUI apenas aponta para esses artefatos persistidos. Ela não reinterpreta nem modifica os resultados científicos.
 
 ### 2.4 Componentes
 
@@ -224,7 +267,7 @@ capture
 extractor
 ```
 
-### 2.5 Nível de detalhe
+### 2.5 Nível de detalhe e resumo dos resultados
 
 No construtor da TUI existem duas opções de apresentação:
 
@@ -235,7 +278,50 @@ Detalhada
 
 Essa escolha controla quanto do resumo final é mostrado pela TUI.
 
-Ela **não reduz o conteúdo persistido no log do run**.
+A interface apresenta o resultado de acordo com a semântica do modo, em vez de exibir somente uma lista genérica de métricas.
+
+Em `TRAIN`, o resumo pode mostrar:
+
+```text
+evolução adversarial por rodada
+A1 × D0 → A1 × D1
+A2 × D1 → A2 × D2
+...
+métricas finais do Defender
+artefatos persistidos
+```
+
+No modo normal, quando existem muitas rodadas, a TUI apresenta uma visão reduzida da evolução. No modo detalhado, todas as rodadas disponíveis podem ser exibidas.
+
+Em `SIMULATE`, o resumo apresenta o confronto entre checkpoints e o funil experimental:
+
+```text
+amostras selecionadas
+      ↓
+evasões matemáticas
+      ↓
+traduções válidas
+      ↓
+execuções dry-run
+```
+
+Quando os nomes dos checkpoints permitem inferência, o confronto é apresentado como, por exemplo:
+
+```text
+A1 × D0
+```
+
+Em `OBSERVE`, o resumo destaca:
+
+```text
+pacotes capturados
+fluxos reconstruídos
+classificação benigno / ataque
+decisões BLOCK
+regras aplicadas
+```
+
+A opção de detalhe **não reduz o conteúdo persistido no log do run**.
 
 Na CLI, o equivalente para aumentar o detalhe mostrado no terminal é a opção global:
 
@@ -794,7 +880,7 @@ A inspeção apresenta, conforme disponível:
 - componentes;
 - quantidade de artefatos.
 
-A TUI fornece a mesma inspeção pela aba `Runs`.
+A TUI fornece a mesma inspeção pela aba `Runs` e destaca também os principais arquivos persistidos, como histórico de treinamento, matriz de checkpoints, resumo, log, resultados de observação e diretório de plots quando presentes.
 
 ---
 
@@ -836,15 +922,21 @@ Pela TUI:
        ↓
 3. selecionar modo e componentes
        ↓
-4. configurar parâmetros
+4. selecionar dataset ou run de origem
        ↓
-5. Validar
+5. escolher checkpoints quando aplicável
        ↓
-6. Salvar TOML, se desejar
+6. configurar parâmetros
        ↓
-7. Executar
+7. Validar
        ↓
-8. Runs → inspecionar resultado
+8. Salvar TOML, se desejar
+       ↓
+9. Executar
+       ↓
+10. consultar o resumo contextual do resultado
+       ↓
+11. Runs → inspecionar artefatos persistidos
 ```
 
 Pela CLI:
