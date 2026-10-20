@@ -20,6 +20,7 @@ dependencies = [
     "typer>=0.16,<1",
     "rich>=14,<15",
     "textual>=8.2,<9",
+    "pytest-cov>=7.1.0",
 ]
 
 [project.scripts]
