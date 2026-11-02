@@ -1,0 +1,41 @@
+{
+  "experiment": "E1-B",
+  "n_seeds": 15,
+  "n_rounds_per_seed": 4,
+  "n_paired_comparisons": 60,
+  "rounds": [
+    1,
+    3,
+    10,
+    20
+  ],
+  "benefit_mean_pp": 31.861000049660408,
+  "benefit_median_pp": 28.32000025155139,
+  "benefit_seed_cluster_bootstrap_95_pp": [
+    29.57797502183409,
+    34.1950084528659
+  ],
+  "adv_wins": 55,
+  "ties": 5,
+  "conv_wins": 0,
+  "mean_evasion_pre_pct": 27.712666955412715,
+  "mean_evasion_adv_pct": 0.1043333344811496,
+  "mean_evasion_conv_pct": 31.96533338414156,
+  "delta_fpr_adv_minus_conv_pp": 1.2713136729222518,
+  "delta_fpr_seed_cluster_bootstrap_95_pp": [
+    1.0080428954423593,
+    1.5258310991957105
+  ],
+  "delta_f1_adv_minus_conv_pp": -0.448782645005766,
+  "delta_f1_seed_cluster_bootstrap_95_pp": [
+    -0.5384153772677713,
+    -0.35592625450549736
+  ],
+  "delta_recall_adv_minus_conv_pp": 0.014060303077644646,
+  "adv_higher_fpr": 55,
+  "conv_higher_fpr": 4,
+  "adv_lower_f1": 53,
+  "conv_lower_f1": 6,
+  "seed_mean_benefit_all_positive": true,
+  "note": "Bootstrap descritivo com seed como unidade; rodadas dentro da seed não são independentes. Somente validação offline do mesmo A_r."
+}

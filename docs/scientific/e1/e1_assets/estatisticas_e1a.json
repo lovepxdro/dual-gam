@@ -1,0 +1,48 @@
+{
+  "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    20,
+    40,
+    42,
+    80,
+    100
+  ],
+  "total_rodadas": 300,
+  "ganho_media_seed_pp": 13.480400088703997,
+  "ganho_ic95_bootstrap_seeds_pp": [
+    12.772843373891979,
+    14.165870118259287
+  ],
+  "ganho_positivo": 204,
+  "ganho_nulo": 85,
+  "ganho_negativo": 11,
+  "pos_menor_1pp": 299,
+  "pre_maior_igual_5pp": 140,
+  "pre_5_pos_menor_1": 139,
+  "pre_media_rodada_1_pp": 73.9240010579427,
+  "pre_media_rodada_20_pp": 2.3213332794451467,
+  "pre_media_rodadas_1_5_pp": 35.03680030435013,
+  "pre_media_rodadas_16_20_pp": 4.029600027948618,
+  "deriva_a3_positiva_seeds": 14,
+  "deriva_a3_media_pp": 3.213333326178448,
+  "deriva_a3_mediana_pp": 2.2000000695697963,
+  "deriva_a3_ic95_bootstrap_seeds_pp": [
+    1.802633293074905,
+    4.953366696371328
+  ],
+  "a3_pior_historico_seeds": 13,
+  "a3_d3_media_pp": 0.1186666694896606,
+  "a3_d20_media_pp": 3.331999995668108,
+  "fpr_teste_media_pp": 3.0784629133154606,
+  "fpr_teste_min_pp": 0.7935656836461126,
+  "fpr_teste_max_pp": 4.037533512064343
+}
