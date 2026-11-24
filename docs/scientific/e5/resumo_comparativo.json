@@ -1,0 +1,65 @@
+{
+  "experimento": "E5-A vs E5-A2",
+  "n_treinamentos_em_cada_grupo": 12,
+  "n_pares_seeds_replicas": 6,
+  "controles_comparaveis": {
+    "seeds": true,
+    "replicas": true,
+    "epochs": true,
+    "batch_size": true,
+    "max_train_samples": true,
+    "val_samples": true,
+    "test_samples": true,
+    "eval_batch": true,
+    "device": true,
+    "epsilon": true,
+    "threshold": true,
+    "init_from": true,
+    "checkpoint_selection": true,
+    "preflight_hash": true,
+    "run_root": true,
+    "dataset": true
+  },
+  "mesmo_dataset_teste_sha256": "ebaf1517bb0275ed38c5714d4669f63e2444733b45f130e6288234e546042bf0",
+  "mesma_amostra_teste_e_ruido": true,
+  "media_por_arquitetura": {
+    "A0": {
+      "asr_alvo_e5a_pct": 0.6269174336401226,
+      "asr_alvo_e5a2_pct": 3.7948512738428706,
+      "asr_alvo_ganho_pp": 3.167933840202748,
+      "asr_transferencia_e5a_pct": 0.0,
+      "asr_transferencia_e5a2_pct": 0.7736427904495131,
+      "diversidade_l2_e5a": 7.420744287109375,
+      "diversidade_l2_e5a2": 4.870147998046875,
+      "tempo_e5a_s": 7.938208872500884,
+      "tempo_e5a2_s": 10.299715010003032
+    },
+    "A1": {
+      "asr_alvo_e5a_pct": 0.6502601040416166,
+      "asr_alvo_e5a2_pct": 12.394957983193278,
+      "asr_alvo_ganho_pp": 11.74469787915166,
+      "asr_transferencia_e5a_pct": 0.0,
+      "asr_transferencia_e5a2_pct": 1.9974656529278376,
+      "diversidade_l2_e5a": 6.239115901692708,
+      "diversidade_l2_e5a2": 4.354487760416666,
+      "tempo_e5a_s": 11.602152610503254,
+      "tempo_e5a2_s": 14.614022946659437
+    }
+  },
+  "recall_medio_por_seed_e_arquitetura_e5a2": {
+    "20": {
+      "A0": 2.4343070561557956,
+      "A1": 10.31079098305989
+    },
+    "42": {
+      "A0": 5.155395491529945,
+      "A1": 14.479124983326663
+    }
+  },
+  "gradiente_diagnostico": {
+    "media_prob": 7.479367591789689,
+    "media_logits": 66.60097563012022,
+    "media_razao_individual": 9.739022971288513,
+    "proporcao_prob_exatamente_um": 0.6510416666666666
+  }
+}
